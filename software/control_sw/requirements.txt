@@ -1,0 +1,11 @@
+setuptools
+pdoc3
+numpy
+scipy
+matplotlib
+pyyaml
+#python3-tk
+termcolor
+progressbar
+remoteobjects
+waitress

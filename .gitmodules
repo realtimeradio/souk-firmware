@@ -1,3 +1,6 @@
 [submodule "firmware/lib/mlib_devel"]
 	path = firmware/lib/mlib_devel
 	url = https://github.com/realtimeradio/mlib_devel
+[submodule "software/casperfpga"]
+	path = software/casperfpga
+	url = https://github.com/realtimeradio/casperfpga
