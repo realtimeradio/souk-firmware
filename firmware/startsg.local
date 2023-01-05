@@ -6,6 +6,7 @@ export JASPER_BACKEND=vitis
 export CASPER_SKIP_STARTUP_LOAD_SYSTEM=yesplease
 export CASPER_PYTHON_VENV_ON_START=/home/jackh/casper-python3.8-venv
 export XILINXD_LICENSE_FILE=/home/jackh/.Xilinx/Xilinx.lic
+export XLNX_DT_REPO_PATH=/home/jackh/src/souk-firmware/firmware/lib/device-tree-xlnx
 
 # over-ride the MATLAB libexpat version with the OS's one.
 # Using LD_PRELOAD=${LD_PRELOAD}:"..." rather than just LD_PRELOAD="..."
