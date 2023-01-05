@@ -1,0 +1,3 @@
+[submodule "firmware/lib/mlib_devel"]
+	path = firmware/lib/mlib_devel
+	url = https://github.com/realtimeradio/mlib_devel
