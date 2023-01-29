@@ -17,7 +17,7 @@ entity ospfb_2x_4096c_8i_ip_struct is
 end ospfb_2x_4096c_8i_ip_struct;
 
 architecture structural of ospfb_2x_4096c_8i_ip_struct is
-  component ospfb_2x_4096c_8i_ip
+  component ospfb_2x_4096c_8i
     port (
       din   : in std_logic_vector( 256-1 downto 0 );
       shift : in std_logic_vector( 32-1 downto 0 );
@@ -30,7 +30,7 @@ architecture structural of ospfb_2x_4096c_8i_ip_struct is
     );
   end component;
 begin
-  ospfb_2x_4096c_8i_ip_inst : ospfb_2x_4096c_8i_ip
+  ospfb_2x_4096c_8i_ip_inst : ospfb_2x_4096c_8i
   port map (
     din => din,
     shift    => shift, 
