@@ -1,0 +1,4 @@
+build/*
+!build/latex/
+build/latex/*
+!build/latex/*.pdf

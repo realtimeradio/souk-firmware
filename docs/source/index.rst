@@ -7,9 +7,12 @@ Welcome to SOUK MKID Readout's documentation!
 =============================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
 
+   installation.rst
+   system_overview.rst
+   control.rst
 
 
 Indices and tables
