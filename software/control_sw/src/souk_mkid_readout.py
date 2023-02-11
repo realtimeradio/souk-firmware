@@ -10,7 +10,7 @@ from .blocks import sync
 #from .blocks import noisegen
 from .blocks import input
 #from .blocks import delay
-#from .blocks import pfb
+from .blocks import pfb
 #from .blocks import mask
 #from .blocks import autocorr
 #from .blocks import eq
@@ -180,8 +180,10 @@ class SoukMkidReadout():
         self.input       = input.Input(self._cfpga, 'input')
         ##: Control interface to Coarse Delay block
         #self.delay       = delay.Delay(self._cfpga, 'delay', n_streams=64)
-        ##: Control interface to PFB block
-        #self.pfb         = pfb.Pfb(self._cfpga, 'pfb')
+        #: Control interface to PFB block
+        self.pfb         = pfb.Pfb(self._cfpga, 'pfb',
+                               fftshift=self.config.get('fftshift', 0xffffffff),
+                           )
         ##: Control interface to Mask (flagging) block
         #self.mask        = mask.Mask(self._cfpga, 'mask')
         ##: Control interface to Autocorrelation block
@@ -212,7 +214,7 @@ class SoukMkidReadout():
             #'noise'     : self.noise,
             'input'     : self.input,
             #'delay'     : self.delay,
-            #'pfb'       : self.pfb,
+            'pfb'       : self.pfb,
             #'mask'      : self.mask,
             #'eq'        : self.eq,
             #'eqtvg'     : self.eqtvg,

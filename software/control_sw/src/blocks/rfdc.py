@@ -63,7 +63,6 @@ class Rfdc(Block):
            # DAC1: Enabled 0
            # DAC2: Enabled 0
            # DAC3: Enabled 0
-           print(s)
            dev = s.split(',')[0].split(':')[0] # E.g. "ADC0"
            enabled = bool(int(s.split(',')[0].split()[-1]))
            status[f"{dev}_enabled"] = enabled
@@ -121,4 +120,4 @@ class Rfdc(Block):
         """
         if read_only:
             return
-        self.core.init(self.lmk_file, self.lmx_file)
+        self.core.init(self.lmkfile, self.lmxfile)
