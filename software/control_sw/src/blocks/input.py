@@ -48,6 +48,44 @@ class Input(Block):
         q = np.frombuffer(dq['data'], dtype=self.dtype)
         return i + 1j*q
 
+    def plot_adc_snapshot(self, nsamples=None):
+        """
+        Plot an ADC snapshot.
+
+        :param nsamples: If provided, only plot this many samples
+        :type nsamples: int
+        """
+        from matplotlib import pyplot as plt
+        x = self.get_adc_snapshot()
+        if nsamples is not None:
+            x = x[0:nsamples]
+        plt.plot(x.real, label='I')
+        plt.plot(x.imag, label='Q')
+        plt.legend()
+        plt.ylabel('ADC counts')
+        plt.xlabel('Sample Number')
+        plt.show()
+
+    def plot_adc_spectrum(self, db=False):
+        """
+        Plot a power spectrum of the ADC input stream using a simple FFT.
+
+        :param db: If True, plot in dBs, else linear.
+        :type db: bool
+        """
+        from matplotlib import pyplot as plt
+        x = self.get_adc_snapshot()
+        X = np.abs(np.fft.fft(x))**2
+        if db:
+            X = 10*np.log10(X)
+        plt.plot(np.fft.fftshift(X))
+        plt.xlabel('FFT bin (DC-centered)')
+        if db:
+            plt.ylabel('Power (dB; Arbitrary Reference)')
+        else:
+            plt.ylabel('Power (Linear, Arbitrary Reference)')
+        plt.show()
+
     def enable_loopback(self):
         """
         Set pipeline to internally loop-back DAC stream into ADC.
