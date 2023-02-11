@@ -3,8 +3,8 @@ import time
 import datetime
 
 from .block import Block
-from cosmic_f.error_levels import *
-from cosmic_f import __version__
+from souk_mkid_readout.error_levels import *
+from souk_mkid_readout import __version__
 
 import casperfpga.sysmon
 

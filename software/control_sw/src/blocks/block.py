@@ -1,7 +1,7 @@
 import logging
 from termcolor import colored
-from cosmic_f import helpers
-from cosmic_f import error_levels as el
+from souk_mkid_readout import helpers
+from souk_mkid_readout import error_levels as el
 
 class Block(object):
     """
@@ -96,7 +96,7 @@ class Block(object):
         flags_dict = {}
         return status_dict, flags_dict
 
-    def print_status(self, use_color=True, ignore_ok=False, use_logger=True):
+    def print_status(self, use_color=True, ignore_ok=False, use_logger=False):
         """
         Print the information returned by `get_status`, highlighting error flags
         with colors.

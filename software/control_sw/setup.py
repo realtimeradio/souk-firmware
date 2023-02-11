@@ -22,8 +22,8 @@ setup(name='souk_mkid_readout',
       author_email='jack@realtimeradio.co.uk',
       url='https://github.com/realtimeradio/souk-firmware',
       provides=['souk_mkid_readout'],
-      packages=['souk_mkid_readout', 'souk_firmware_readout.blocks'],
-      package_dir={'souk_firmware_readout' : 'src'},
+      packages=['souk_mkid_readout', 'souk_mkid_readout.blocks'],
+      package_dir={'souk_mkid_readout' : 'src'},
       scripts=glob.glob('scripts/*.py'),
       )
 

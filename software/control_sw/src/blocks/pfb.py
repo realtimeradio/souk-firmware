@@ -1,7 +1,7 @@
 import numpy as np
 
 from .block import Block
-from cosmic_f.error_levels import *
+from souk_mkid_readout.error_levels import *
 
 class Pfb(Block):
     #DEFAULT_SHIFT = 0b0011011011111
