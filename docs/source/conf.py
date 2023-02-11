@@ -25,7 +25,7 @@ version = u'1.0.0'
 # The full version, including alpha/beta/rc tags.
 import subprocess
 commit_id = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).strip().decode('ascii')
-release = 'souk\_mkid\_readout-' + commit_id + ':souk\_mkid\_readout-' + souk_mkid_readout.__version__
+release = 'souk_mkid_readout-' + commit_id + ':souk_mkid_readout-' + souk_mkid_readout.__version__
 print(release)
 
 # -- General configuration ---------------------------------------------------
