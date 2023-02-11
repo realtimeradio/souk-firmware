@@ -31,6 +31,7 @@ class Fpga(Block):
         except:
             self.server_hostname = ''
         self.sysmon = None #casperfpga.sysmon.Sysmon(self.host)
+        self.antname = None
 
     def get_fpga_clock(self):
         """

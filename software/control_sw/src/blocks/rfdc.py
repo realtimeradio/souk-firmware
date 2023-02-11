@@ -38,7 +38,7 @@ class Rfdc(Block):
     def _check_clockfile_exists(self, f):
         available = self.core.show_clk_files()
         if not f in available:
-            self.error(f"Clockfile {f} not in available files ({available})")
+            self._error(f"Clockfile {f} not in available files ({available})")
             return False
         return True
 

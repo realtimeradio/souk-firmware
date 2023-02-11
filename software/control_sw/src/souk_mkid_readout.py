@@ -8,7 +8,7 @@ from .blocks import fpga
 from .blocks import rfdc
 from .blocks import sync
 #from .blocks import noisegen
-#from .blocks import input
+from .blocks import input
 #from .blocks import delay
 #from .blocks import pfb
 #from .blocks import mask
@@ -176,8 +176,8 @@ class SoukMkidReadout():
         self.sync        = sync.Sync(self._cfpga, 'sync')
         ##: Control interface to Noise Generation block
         #self.noise       = noisegen.NoiseGen(self._cfpga, 'noise', n_noise=2, n_outputs=64)
-        ##: Control interface to Input Multiplex block
-        #self.input       = input.Input(self._cfpga, 'input', n_streams=64)
+        #: Control interface to Input Multiplex block
+        self.input       = input.Input(self._cfpga, 'input')
         ##: Control interface to Coarse Delay block
         #self.delay       = delay.Delay(self._cfpga, 'delay', n_streams=64)
         ##: Control interface to PFB block
@@ -210,7 +210,7 @@ class SoukMkidReadout():
             'rfdc'      : self.rfdc,
             'sync'      : self.sync,
             #'noise'     : self.noise,
-            #'input'     : self.input,
+            'input'     : self.input,
             #'delay'     : self.delay,
             #'pfb'       : self.pfb,
             #'mask'      : self.mask,
