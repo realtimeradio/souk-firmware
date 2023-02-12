@@ -15,27 +15,6 @@ def plot_pfb(ntaps, window_func, offset=0):
     window = window_func(ntaps*NFFT)
     coeffs = sinc * window
 
-    #print(trange)
-
-    #offset_mixer_r = np.sin(-np.linspace(0, 2*PI/2., NFFT))
-    #offset_mixer_i = np.cos(-np.linspace(0, 2*PI/2., NFFT))
-    #plt.plot(offset_mixer_r, label='cos')
-    #plt.plot(offset_mixer_i, label='sin')
-    #plt.legend()
-    #plt.show()
-
-    #plt.plot(coeffs)
-    #coeffs = coeffs * (offset_mixer_r + 1j*offset_mixer_i)
-    #plt.plot(coeffs.real)
-    #plt.plot(coeffs.imag)
-    #plt.show()
-    
-    #plt.plot(sinc)
-    #plt.show()
-    coeffs_sum = np.zeros(NFFT)
-    for t in range(ntaps):
-        coeffs_sum += coeffs[t*NFFT:(t+1)*NFFT]
-    
     sweep_freq = np.linspace(-NFFT//2, NFFT//2, NFREQ_TRIAL) # fraction of pfb bin
     resp_plot = np.zeros([NFFT*OS_FACTOR, NFREQ_TRIAL])
     for fn, f in enumerate(sweep_freq):
