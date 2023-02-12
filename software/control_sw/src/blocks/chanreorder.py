@@ -23,6 +23,7 @@ class ChanReorder(Block):
 
     :param n_parallel_chans_in: Number of channels handled in parallel at the input
     :type n_parallel_chans_in: int
+
     """
     _map_format = 'I' # CASPER library-defined map word format
     _map_reg = 'map1' # CASPER library-defined map name in reorder block
@@ -57,7 +58,6 @@ class ChanReorder(Block):
             `outmap[0] = 16`, then the first channel out of the reordr block
             will be channel 16. 
         :type outmap: list of int
-
 
         """
         outmap = np.array(outmap)

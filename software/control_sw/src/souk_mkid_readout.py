@@ -16,6 +16,7 @@ from .blocks import autocorr
 #from .blocks import eq
 from .blocks import pfbtvg
 from .blocks import chanreorder
+from .blocks import mixer
 #from .blocks import packetizer
 #from .blocks import eth
 #from .blocks import corr
@@ -207,9 +208,15 @@ class SoukMkidReadout():
                             )
         #: Control interface to Channel Reorder block
         self.chanselect   = chanreorder.ChanReorder(self._cfpga, 'chan_select',
-                               n_chans_in=4096,
-                               n_chans_out=2048,
-                               n_parallel_chans_in=8,
+                                n_chans_in=4096,
+                                n_chans_out=2048,
+                                n_parallel_chans_in=8,
+                           )
+        #: Control interface to Mixer block
+        self.mixer        = mixer.Mixer(self._cfpga, 'mix',
+                                n_chans=2048,
+                                n_parallel_chans=8,
+                                phase_bp=31,
                            )
         ##: Control interface to Packetizer block
         #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_mhz=196.608)
@@ -236,6 +243,7 @@ class SoukMkidReadout():
             #'eq'        : self.eq,
             'pfbtvg'     : self.pfbtvg,
             'chanselect' : self.chanselect,
+            'mixer'      : self.mixer,
             #'packetizer': self.packetizer,
             #'eth'       : self.eth,
             'autocorr'  : self.autocorr,
