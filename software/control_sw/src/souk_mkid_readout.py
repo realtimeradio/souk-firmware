@@ -14,7 +14,7 @@ from .blocks import pfb
 #from .blocks import mask
 from .blocks import autocorr
 #from .blocks import eq
-#from .blocks import eqtvg
+from .blocks import pfbtvg
 #from .blocks import chanreorder
 #from .blocks import packetizer
 #from .blocks import eth
@@ -196,8 +196,15 @@ class SoukMkidReadout():
                            )
         ##: Control interface to Equalization block
         #self.eq          = eq.Eq(self._cfpga, 'eq', n_streams=64, n_coeffs=2**9)
-        ##: Control interface to post-equalization Test Vector Generator block
-        #self.eqtvg       = eqtvg.EqTvg(self._cfpga, 'post_eq_tvg', n_streams=64, n_chans=2**12)
+        #: Control interface to post-PFB Test Vector Generator block
+        self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, 'pfbtvg',
+                                n_inputs=2,
+                                n_chans=4096,
+                                n_serial_inputs=1,
+                                n_rams=2,
+                                n_samples_per_word=4,
+                                sample_format='h',
+                            )
         ##: Control interface to Channel Reorder block
         #self.reorder     = chanreorder.ChanReorder(self._cfpga, 'chan_reorder', n_chans=2**12)
         ##: Control interface to Packetizer block
@@ -223,7 +230,7 @@ class SoukMkidReadout():
             'pfb'       : self.pfb,
             #'mask'      : self.mask,
             #'eq'        : self.eq,
-            #'eqtvg'     : self.eqtvg,
+            'pfbtvg'     : self.pfbtvg,
             #'reorder'   : self.reorder,
             #'packetizer': self.packetizer,
             #'eth'       : self.eth,

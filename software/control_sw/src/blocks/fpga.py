@@ -98,14 +98,18 @@ class Fpga(Block):
 
     def is_programmed(self):
         """
-        Lazy check to see if a board is programmed.
-        Check for the "version_version" register. If it exists, the board is deemed programmed.
+        Check to see if a board is programmed.
+        If the Katcp command `listdev` fails, assume that it isn't
         
         :return: True if programmed, False otherwise.
         :rtype: bool
 
         """
-        return 'version_version' in self.listdev()
+        try:
+            self.listdev()
+            return True
+        except:
+            return False
 
     def get_status(self):
         """
