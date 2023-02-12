@@ -17,6 +17,7 @@ from .blocks import autocorr
 from .blocks import pfbtvg
 from .blocks import chanreorder
 from .blocks import mixer
+from .blocks import accumulator
 #from .blocks import packetizer
 #from .blocks import eth
 #from .blocks import corr
@@ -211,13 +212,25 @@ class SoukMkidReadout():
                                 n_chans_in=4096,
                                 n_chans_out=2048,
                                 n_parallel_chans_in=8,
-                           )
+                            )
         #: Control interface to Mixer block
         self.mixer        = mixer.Mixer(self._cfpga, 'mix',
                                 n_chans=2048,
                                 n_parallel_chans=8,
                                 phase_bp=31,
-                           )
+                            )
+        #: Control interface to Accumulator Blocks
+        self.accumulators   =  []
+        self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc0',
+                                    n_chans=4096,
+                                    n_parallel_chans=8,
+                                )
+                               ]
+        self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc1',
+                                    n_chans=4096,
+                                    n_parallel_chans=8,
+                                )
+                               ]
         ##: Control interface to Packetizer block
         #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_mhz=196.608)
         ##: Control interface to 40GbE interface block
@@ -246,7 +259,9 @@ class SoukMkidReadout():
             'mixer'      : self.mixer,
             #'packetizer': self.packetizer,
             #'eth'       : self.eth,
-            'autocorr'  : self.autocorr,
+            'autocorr'     : self.autocorr,
+            'accumulator0' : self.accumulators[0],
+            'accumulator1' : self.accumulators[1],
             #'corr'      : self.corr,
             #'powermon'  : self.powermon,
         }
