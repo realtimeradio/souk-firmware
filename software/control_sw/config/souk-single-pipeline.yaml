@@ -1,7 +1,7 @@
 hosts:
   - zcu111
 
-fpgfile: firmware/src/souk_single_pipeline/outputs/souk_single_pipeline_2023-02-11_1729.fpg
+fpgfile: firmware/src/souk_single_pipeline/outputs/souk_single_pipeline_2023-02-12_1507.fpg
 lmkfile: 122M88_PL_122M88_SYSREF_7M68_clk5_12M8.txt
 lmxfile: LMX_REF_122M88_OUT_245M76.txt
 
