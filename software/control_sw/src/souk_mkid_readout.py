@@ -18,6 +18,7 @@ from .blocks import pfbtvg
 from .blocks import chanreorder
 from .blocks import mixer
 from .blocks import accumulator
+from .blocks import generator
 from .blocks import output
 #from .blocks import packetizer
 #from .blocks import eth
@@ -232,6 +233,10 @@ class SoukMkidReadout():
                                     n_parallel_chans=8,
                                 )
                                ]
+        #: Control interface to CORDIC generators
+        self.gen_cordic    = generator.Generator(self._cfpga, 'cordic_gen')
+        #: Control interface to LUT generators
+        self.gen_lut       = generator.Generator(self._cfpga, 'lut_gen')
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, 'output')
         ##: Control interface to Packetizer block
@@ -266,6 +271,8 @@ class SoukMkidReadout():
             'accumulator0' : self.accumulators[0],
             'accumulator1' : self.accumulators[1],
             'output'       : self.output,
+            'gen_cordic'   : self.gen_cordic,
+            'gen_lut'      : self.gen_lut,
             #'corr'      : self.corr,
             #'powermon'  : self.powermon,
         }

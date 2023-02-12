@@ -139,3 +139,31 @@ Channel Sub-Select Control
 .. autoclass:: souk_mkid_readout.blocks.chanreorder.ChanReorder
   :no-show-inheritance:
   :members:
+
+Mixer Control
++++++++++++++
+
+.. autoclass:: souk_mkid_readout.blocks.mixer.Mixer
+  :no-show-inheritance:
+  :members:
+
+Accumulator Control
++++++++++++++++++++
+
+.. autoclass:: souk_mkid_readout.blocks.accumulator.Accumulator
+  :no-show-inheritance:
+  :members:
+
+Generator
++++++++++
+
+.. autoclass:: souk_mkid_readout.blocks.generator.Generator
+  :no-show-inheritance:
+  :members:
+
+Output
+++++++
+
+.. autoclass:: souk_mkid_readout.blocks.output.Output
+  :no-show-inheritance:
+  :members:
