@@ -26,10 +26,13 @@ class Generator(Block):
         """
         Get the compile time block configuration
         """
-        x = self.read_uint('block_info')
+        try:
+            x = self.read_uint('block_info')
+        except:
+            return
         self.n_generators = (x >> 24) & 0xff
         self._n_parallel  = (x >> 16) & 0xff
-        self.n_samples    = (x >> 8)  & 0xff
+        self.n_samples    = 2**((x >> 8)  & 0xff)
 
     def set_lut_output(self, n, x):
         """
@@ -41,6 +44,8 @@ class Generator(Block):
         :param x: Array (or list) of complex sample values
         :type x: list or numpy.array
         """
+        if self.n_generators is None:
+            self._get_block_params()
         if n >= self.n_generators:
             self._error(f'Requested generator {n}, but only {self.n_generators} are provided')
             return
@@ -48,10 +53,30 @@ class Generator(Block):
         if len(x) != self.n_samples:
             self._error(f'{len(x)} sample were provided but expected {self.n_samples}')
             return
-        imag = np.array(x.imag, dtype='>i4')
-        real = np.array(x.real, dtype='>i4')
+        imag = np.array(x.imag * 2**14, dtype='>i2')
+        real = np.array(x.real * 2**14, dtype='>i2')
         self.write(f'{n}_i', real.tobytes())
         self.write(f'{n}_q', imag.tobytes())
+
+    def set_output_freq(self, n, freq_mhz, sample_rate_mhz=5000.):
+        """
+        Set an output to a CW tone at a specific frequency.
+
+        :param n: Which generator to target
+        :type n: int
+
+        :param freq_mhz: Output frequency, in MHz
+        :type freq_mhz: float
+
+        :param sample_rate_mhz: DAC sample rate, in MHz
+        :type sample_rate_mhz: float
+        """
+        if self.n_samples > 1:
+            t = np.arange(self.n_samples) / sample_rate_mhz
+            x = np.exp(1j*2*np.pi*freq_mhz*t)
+            self.set_lut_output(n, x)
+        else:
+            raise NotImplementedError
 
     def set_cordic_output(self, n, p):
         """
@@ -63,10 +88,12 @@ class Generator(Block):
         :param p: phase increment, in units of radians
         :type p: float
         """
+        if self.n_generators is None:
+            self._get_block_params()
         if n >= self.n_generators:
             self._error(f'Requested generator {n}, but only {self.n_generators} are provided')
             return
-        if self.n_samples != 0:
+        if self.n_samples > 1:
             self._error('This is a LUT generator, and provides no CORDIC capabilities')
             return
         # phase should be in units of pi radians, and in range +/-1
@@ -90,10 +117,11 @@ class Generator(Block):
             If True, do nothing. If False, reset phase and generator contents
         :type read_only: bool
         """
+        self._get_block_params()
         if read_only:
             return
         for g in range(self.n_generators):
-            if self.n_samples > 0:
+            if self.n_samples > 1:
                 self.set_lut_output(g, np.zeros(self.n_samples, dtype=complex))
             else:
                 self.set_cordic_output(g, 0)
