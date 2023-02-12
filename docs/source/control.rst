@@ -119,6 +119,13 @@ PFB Control
   :no-show-inheritance:
   :members:
 
+PFB TVG Control
++++++++++++++++
+
+.. autoclass:: souk_mkid_readout.blocks.pfbtvg.PfbTvg
+  :no-show-inheritance:
+  :members:
+
 Auto-correlation Control
 ++++++++++++++++++++++++
 
