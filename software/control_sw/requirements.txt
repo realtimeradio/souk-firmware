@@ -9,4 +9,3 @@ termcolor
 progressbar
 remoteobjects
 waitress
-scipy
