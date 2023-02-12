@@ -18,6 +18,7 @@ from .blocks import pfbtvg
 from .blocks import chanreorder
 from .blocks import mixer
 from .blocks import accumulator
+from .blocks import output
 #from .blocks import packetizer
 #from .blocks import eth
 #from .blocks import corr
@@ -231,6 +232,8 @@ class SoukMkidReadout():
                                     n_parallel_chans=8,
                                 )
                                ]
+        #: Control interface to Output Multiplex block
+        self.output        = output.Output(self._cfpga, 'output')
         ##: Control interface to Packetizer block
         #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_mhz=196.608)
         ##: Control interface to 40GbE interface block
@@ -262,6 +265,7 @@ class SoukMkidReadout():
             'autocorr'     : self.autocorr,
             'accumulator0' : self.accumulators[0],
             'accumulator1' : self.accumulators[1],
+            'output'       : self.output,
             #'corr'      : self.corr,
             #'powermon'  : self.powermon,
         }
