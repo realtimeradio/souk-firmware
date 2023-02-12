@@ -1,7 +1,6 @@
 import time
 import struct
 import numpy as np
-from scipy.signal import medfilt
 
 from .block import Block
 from souk_mkid_readout.error_levels import *
@@ -194,6 +193,12 @@ class AutoCorr(Block):
 
         assert flush_vacc in [True, False, 'auto'], "Don't understand value of `flush_vacc`"
         assert filter_ksize is None or filter_ksize % 2 == 1, "Filter kernel size should be odd"
+        if filter_ksize is not None:
+            try:
+                from scipy.signal import medfilt
+            except:
+                self._exception('Failed to import scipy.signal, which is needed for median filtering')
+                raise
 
         auto_flush = False
         if self._use_mux:
