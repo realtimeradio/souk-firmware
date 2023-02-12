@@ -132,3 +132,10 @@ Auto-correlation Control
 .. autoclass:: souk_mkid_readout.blocks.autocorr.AutoCorr
   :no-show-inheritance:
   :members:
+
+Channel Sub-Select Control
+++++++++++++++++++++++++++
+
+.. autoclass:: souk_mkid_readout.blocks.chanreorder.ChanReorder
+  :no-show-inheritance:
+  :members:
