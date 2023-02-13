@@ -76,7 +76,8 @@ class Generator(Block):
             x = np.exp(1j*2*np.pi*freq_mhz*t)
             self.set_lut_output(n, x)
         else:
-            raise NotImplementedError
+            phase_step = 2*np.pi * freq_mhz / sample_rate_mhz
+            self.set_cordic_output(n, phase_step)
 
     def set_cordic_output(self, n, p):
         """
@@ -100,8 +101,8 @@ class Generator(Block):
         phase_scaled = p / np.pi
         phase_scaled = ((phase_scaled + 1) % 2) - 1
         phase_scaled = int(phase_scaled * 2**63)
-        self.write_int(f'{n}_phase_inc_inc_msb', (phase_scaled >> 32) & 0xffffffff)
-        self.write_int(f'{n}_phase_inc_inc_lsb', phase_scaled & 0xffffffff)
+        self.write_int(f'{n}_phase_inc_msb', (phase_scaled >> 32) & 0xffffffff)
+        self.write_int(f'{n}_phase_inc_lsb', phase_scaled & 0xffffffff)
 
     def reset_phase(self):
         """
