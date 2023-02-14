@@ -277,7 +277,7 @@ class SoukMkidReadout():
             #'powermon'  : self.powermon,
         }
 
-    def initialize(self, read_only=True):
+    def initialize(self, read_only=False):
         """
         Call the ```initialize`` methods of all underlying blocks, then
         optionally issue a software global reset.
@@ -288,7 +288,7 @@ class SoukMkidReadout():
         """
         if not self.fpga.is_programmed():
             self.logger.info("Board is _NOT_ programmed")
-            if not self.read_only:
+            if not read_only:
                 self.program() 
         for blockname, block in self.blocks.items():
             if read_only:
