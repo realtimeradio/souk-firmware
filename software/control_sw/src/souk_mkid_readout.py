@@ -193,19 +193,19 @@ class SoukMkidReadout():
         #: Control interface to Autocorrelation block
         self.autocorr    = autocorr.AutoCorr(self._cfpga, 'autocorr',
                                n_chans=4096,
-                               n_signals=2,
-                               n_parallel_streams=8,
-                               n_cores=2,
+                               n_signals=1,
+                               n_parallel_streams=16,
+                               n_cores=1,
                                use_mux=False,
                            )
         ##: Control interface to Equalization block
         #self.eq          = eq.Eq(self._cfpga, 'eq', n_streams=64, n_coeffs=2**9)
         #: Control interface to post-PFB Test Vector Generator block
         self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, 'pfbtvg',
-                                n_inputs=2,
+                                n_inputs=1,
                                 n_chans=4096,
                                 n_serial_inputs=1,
-                                n_rams=2,
+                                n_rams=4,
                                 n_samples_per_word=4,
                                 sample_format='h',
                             )
