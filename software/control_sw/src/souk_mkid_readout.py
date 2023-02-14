@@ -286,6 +286,10 @@ class SoukMkidReadout():
             in a read_only manner, and skip software reset.
         :type read_only: bool
         """
+        if not self.fpga.is_programmed():
+            self.logger.info("Board is _NOT_ programmed")
+            if not self.read_only:
+                self.program() 
         for blockname, block in self.blocks.items():
             if read_only:
                 self.logger.info("Initializing block (read only): %s" % blockname)
