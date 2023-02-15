@@ -224,7 +224,7 @@ class AutoCorr(Block):
         else:
             return spec
 
-    def plot_all_spectra(self, db=True, show=True, filter_ksize=None):
+    def plot_all_spectra(self, db=True, show=True, filter_ksize=None, adc_srate_mhz=None):
         """
         Plot the spectra of all signals,
         with accumulation length divided out
@@ -238,6 +238,10 @@ class AutoCorr(Block):
         :param filter_ksize: If not None, apply a spectral median filter
             with this kernel size. The kernet size should be odd.
         :type filter_ksize: int
+
+        :param adc_srate_mhz: ADC sample rate in MHz. If provided, plot with an appropriate
+            frequency scale on the X-axis.
+        :type adc_srate_mhz: float
 
         :return: matplotlib.Figure
 
@@ -257,15 +261,23 @@ class AutoCorr(Block):
             specs = 10*np.log10(specs)
         else:
             ax.set_ylabel('Power [linear]')
-        ax.set_xlabel('Frequency Channel')
+        if adc_srate_mhz is not None:
+            freqs = np.fft.fftfreq(self.n_chans, d=1./adc_srate_mhz)
         for speci, spec in enumerate(specs):
-            ax.plot(spec, label="signal_%d" % (speci))
+            if adc_srate_mhz is not None:
+                ax.plot(np.fft.fftshift(freqs), np.fft.fftshift(spec),
+                            label="signal_%d" % (speci))
+                ax.set_xlabel('Frequency [MHz]')
+            else:
+                ax.plot(np.fft.fftshift(spec),
+                            label="signal_%d" % (speci))
+                ax.set_xlabel('FFT Channel')
         ax.legend()
         if show:
             plt.show()
         return f
 
-    def plot_spectra(self, signal_block=0, db=True, show=True, filter_ksize=None):
+    def plot_spectra(self, signal_block=0, db=True, show=True, filter_ksize=None, adc_srate_mhz=None):
         """
         Plot the spectra of all signals in a single signal_block,
         with accumulation length divided out
@@ -289,6 +301,10 @@ class AutoCorr(Block):
             with this kernel size. The kernet size should be odd.
         :type filter_ksize: int
 
+        :param adc_srate_mhz: ADC sample rate in MHz. If provided, plot with an appropriate
+            frequency scale on the X-axis.
+        :type adc_srate_mhz: float
+
         :return: matplotlib.Figure
 
         """
@@ -301,13 +317,21 @@ class AutoCorr(Block):
             specs = 10*np.log10(specs)
         else:
             ax.set_ylabel('Power [linear]')
-        ax.set_xlabel('Frequency Channel')
         if self._use_mux:
             channel_offset = signal_block * self.n_signals_per_block
         else:
             channel_offset = 0
+        if adc_srate_mhz is not None:
+            freqs = np.fft.fftfreq(self.n_chans, d=1./adc_srate_mhz)
         for speci, spec in enumerate(specs):
-            ax.plot(spec, label="signal_%d" % (channel_offset + speci))
+            if adc_srate_mhz is not None:
+                ax.plot(np.fft.fftshift(freqs), np.fft.fftshift(spec),
+                            label="signal_%d" % (channel_offset + speci))
+                ax.set_xlabel('Frequency [MHz]')
+            else:
+                ax.plot(np.fft.fftshift(spec),
+                            label="signal_%d" % (channel_offset + speci))
+                ax.set_xlabel('FFT Channel')
         ax.legend()
         if show:
             plt.show()
