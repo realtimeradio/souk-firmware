@@ -213,7 +213,7 @@ class SoukMkidReadout():
         self.chanselect   = chanreorder.ChanReorder(self._cfpga, 'chan_select',
                                 n_chans_in=4096,
                                 n_chans_out=2048,
-                                n_parallel_chans_in=8,
+                                n_parallel_chans_in=16,
                             )
         #: Control interface to Mixer block
         self.mixer        = mixer.Mixer(self._cfpga, 'mix',
