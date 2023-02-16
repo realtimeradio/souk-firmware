@@ -91,8 +91,8 @@ class Accumulator(Block):
             ramname = f'dout{i}'
             d = np.frombuffer(self.read(ramname, self._n_serial_chans*4*2), dtype='>i4')
             for j in range(self._n_serial_chans):
-                dout[self._n_parallel_chans * j].real = d[2*j]
-                dout[self._n_parallel_chans * j].imag = d[2*j + 1]
+                dout.real[self._n_parallel_chans * j + i] = d[2*j]
+                dout.imag[self._n_parallel_chans * j + i] = d[2*j + 1]
         stop_acc_cnt = self.get_acc_cnt()
         if start_acc_cnt != stop_acc_cnt:
             self._warning('Accumulation counter changed while reading data!')
@@ -130,28 +130,30 @@ class Accumulator(Block):
         from matplotlib import pyplot as plt
         spec = self.get_new_spectra()
         if power:
+            spec = np.abs(spec)**2
             f, ax = plt.subplots(1,1)
             ax.set_xlabel('Frequency Channel')
             if db:
                 ax.set_ylabel('Power [dB]')
-                specs = 10*np.log10(np.abs(specs))
+                specs = 10*np.log10(np.abs(spec))
             else:
                 ax.set_ylabel('Power [linear]')
             ax.plot(spec)
         else:
-            f, ax = plt.subplots(1,3)
-            plt.subplot(1,3,1)
+            f, ax = plt.subplots(3,1)
+            plt.subplot(3,1,1)
             plt.plot(spec.real, label='real')
             plt.plot(spec.imag, label='imag')
-            ax.set_xlabel('Frequency Channel')
-            plt.subplot(1,3,2)
+            plt.legend()
+            plt.xlabel('Frequency Channel')
+            plt.subplot(3,1,2)
             plt.plot(np.abs(spec))
-            ax.set_ylabel('Amplitude')
-            ax.set_xlabel('Frequency Channel')
-            plt.subplot(1,3,3)
+            plt.ylabel('Amplitude')
+            plt.xlabel('Frequency Channel')
+            plt.subplot(3,1,3)
             plt.plot(np.angle(spec))
-            ax.set_ylabel('Phase [rads]')
-            ax.set_xlabel('Frequency Channel')
+            plt.ylabel('Phase [rads]')
+            plt.xlabel('Frequency Channel')
         if show:
             plt.show()
         return f
