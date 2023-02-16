@@ -161,6 +161,7 @@ class SoukMkidReadout():
         if self.fpgfile is None:
             self.logger.exception("Couldn't figure out what .fpg to program")
             raise RuntimeError
+        self.logger.info(f"Programming with {self.fpgfile}")
         self._cfpga.upload_to_ram_and_program(self.fpgfile)
         self._initialize_blocks()
 
@@ -224,12 +225,12 @@ class SoukMkidReadout():
         #: Control interface to Accumulator Blocks
         self.accumulators   =  []
         self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc0',
-                                    n_chans=4096,
+                                    n_chans=2048,
                                     n_parallel_chans=8,
                                 )
                                ]
         self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc1',
-                                    n_chans=4096,
+                                    n_chans=2048,
                                     n_parallel_chans=8,
                                 )
                                ]
