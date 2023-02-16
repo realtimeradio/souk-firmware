@@ -144,5 +144,5 @@ class ChanReorder(Block):
         if read_only:
             pass
         else:
-            chan_order = np.arange(0, self.n_chans_out) # output first channels
+            chan_order = np.arange(0, self.n_chans_in, 2) # output every other channel
             self.set_channel_outmap(chan_order)
