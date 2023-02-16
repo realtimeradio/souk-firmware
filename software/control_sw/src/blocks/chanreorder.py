@@ -25,7 +25,7 @@ class ChanReorder(Block):
     :type n_parallel_chans_in: int
 
     """
-    _map_format = 'I' # CASPER library-defined map word format
+    _map_format = 'i4' # CASPER library-defined map word format
     _map_reg = 'map1' # CASPER library-defined map name in reorder block
     def __init__(self, host, name,
             n_chans_in=4096,
@@ -48,7 +48,7 @@ class ChanReorder(Block):
 
     def set_channel_outmap(self, outmap):
         """
-        Reoutmap the channels such that the channel outmap[i]
+        Remap the channels such that the channel outmap[i]
         emerges out of the reorder map in position i.
 
         The provided map must be `self.n_chans_out` elements long, else
@@ -71,8 +71,8 @@ class ChanReorder(Block):
 
         serial_maps = np.zeros([self._n_parallel_chans_in, self._n_serial_chans_in],
                           dtype='>%s' % self._map_format)
-        parallel_maps = np.zeros([self._n_parallel_chans_out, self._n_serial_chans_in],
-                          dtype='>B')
+        parallel_maps = np.zeros([self._n_serial_chans_in, self._n_parallel_chans_out],
+                          dtype='>i1')
         # outn is where we want this channel in the output
         # outchan is where this channel is at the input
         for outn, outchan in enumerate(outmap):
@@ -87,7 +87,7 @@ class ChanReorder(Block):
             # build maps appropriately
             self._debug(f'Chan {outchan} Setting input {in_pstream}:{in_spos} to {out_pstream}:{out_spos}')
             serial_maps[in_pstream, out_spos] = in_spos
-            parallel_maps[out_pstream, out_spos] = in_pstream
+            parallel_maps[out_spos, out_pstream] = in_pstream
         for i in range(self._n_parallel_chans_in):
             self.write(f'reorder_{i}_{self._map_reg}', serial_maps[i].tobytes())
         self.write('pmap', parallel_maps.reshape(self.n_chans_out).tobytes())
@@ -104,7 +104,7 @@ class ChanReorder(Block):
 
         serial_maps = np.zeros([self._n_parallel_chans_in, self._n_serial_chans_in],
                           dtype='>%s' % self._map_format)
-        parallel_maps = np.zeros([self._n_parallel_chans_out, self._n_serial_chans_in],
+        parallel_maps = np.zeros([self._n_serial_chans_in, self._n_parallel_chans_out],
                           dtype='>B')
 
         nbytes_s = len(serial_maps[0].tobytes())
@@ -123,7 +123,7 @@ class ChanReorder(Block):
             # Which output serial position is output outn in
             out_spos = outn // self._n_parallel_chans_out
             # Which input parallel stream was feeding out_pstream?
-            in_pstream = parallel_maps[out_pstream, out_spos]
+            in_pstream = parallel_maps[out_spos, out_pstream]
             # Which input serial position was feeding out_spos
             in_stream = serial_maps[in_pstream, out_spos]
             # convert to an input channel number
