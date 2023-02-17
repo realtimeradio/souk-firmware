@@ -58,7 +58,7 @@ class Generator(Block):
         self.write(f'{n}_i', real.tobytes())
         self.write(f'{n}_q', imag.tobytes())
 
-    def set_output_freq(self, n, freq_mhz, sample_rate_mhz=5000.):
+    def set_output_freq(self, n, freq_mhz, sample_rate_mhz=5000., amplitude=1.):
         """
         Set an output to a CW tone at a specific frequency.
 
@@ -70,12 +70,18 @@ class Generator(Block):
 
         :param sample_rate_mhz: DAC sample rate, in MHz
         :type sample_rate_mhz: float
+
+        :param amplitude: Set the output of amplitude of the CW signal. Only
+            applicable for LUT-based generators
+        :type amplitude: float
         """
         if self.n_samples > 1:
             t = np.arange(self.n_samples) / sample_rate_mhz
-            x = np.exp(1j*2*np.pi*freq_mhz*t)
+            x = np.exp(1j*2*np.pi*freq_mhz*t) * amplitude
             self.set_lut_output(n, x)
         else:
+            if amplitude != 1.0:
+                self._warning("Amplitude setting not used for CORDIC generators")
             phase_step = 2*np.pi * freq_mhz / sample_rate_mhz
             self.set_cordic_output(n, phase_step)
 
