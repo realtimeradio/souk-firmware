@@ -4,7 +4,14 @@ F-Engine System Overview
 Overview
 --------
 
-TODO
+A block diagram of the readout system -- which is also the top-level of the Simulink source code for the firmware -- is shown in :numref:`firmware_top`.
+
+
+.. figure:: _static/figures/souk-readout-a-labeled.png
+    :align: center
+    :name: firmware_top
+
+    Top-level Simulink diagram.
 
 Initialization
 ++++++++++++++
@@ -37,7 +44,7 @@ See :numref:`control-interface` for a full software API description
 
   # Initialize all the firmware blocks
   # and issue a global software reset
-  f.initialize(read_only=False)
+  f.initialize()
 
 
 Block Descriptions

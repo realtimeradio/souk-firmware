@@ -35,9 +35,8 @@ a single RFSoC board running LWA's F-Engine firmware. An example is below:
   # and initialize all the firmware blocks
   if not f.fpga.is_programmed():
     f.program() # Load whatever firmware is in flash
-    # Wait 30 seconds for the board to reboot...
-    # Initialize firmware blocks, including ADC link training
-    f.initialize(read_only=False)
+    # Initialize firmware blocks
+    f.initialize()
 
   # Blocks are available as items in the SoukMkidReadout `blocks`
   # dictionary, or can be accessed directly as attributes
@@ -46,8 +45,8 @@ a single RFSoC board running LWA's F-Engine firmware. An example is below:
   # Print available block names
   print(sorted(f.blocks.keys()))
   # Returns:
-  # ['adc', 'autocorr', 'corr', 'delay', 'eq', 'eq_tvg', 'eth',
-  # 'fpga', 'input', 'noise', 'packetizer', 'pfb', 'reorder', 'sync']
+  # ['rfdc', 'input', 'autocorr', 'pfb', 'pfbtvg', 'chanreorder', 'mix',
+  # 'gen_lut', 'gen_cordic', 'output', 'accumulator0', 'accumulator1']
 
   # Grab some ADC data from the ADC
   adc_data = f.input.get_adc_snapshot()
