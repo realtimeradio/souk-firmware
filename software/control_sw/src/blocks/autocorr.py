@@ -72,8 +72,8 @@ class AutoCorr(Block):
         """
         Get the current accumulation count.
 
-        :return count: Current accumulation count
-        :rtype count: int
+        :return: Current accumulation count
+        :rtype: int
         """
         return self.read_uint('acc_cnt')
    
@@ -82,8 +82,8 @@ class AutoCorr(Block):
         Block until a new accumulation completes, then return
         the count index.
 
-        :return count: Current accumulation count
-        :rtype count: int
+        :return: Current accumulation count
+        :rtype: int
         """
         cnt0 = self.get_acc_cnt()
         cnt1 = self.get_acc_cnt()
@@ -113,8 +113,8 @@ class AutoCorr(Block):
         """
         Get the core input multiplexer select value.
 
-        :return sel: Current multiplexer select value
-        :rtype sel: int
+        :return: Current multiplexer select value
+        :rtype: int
 
         """
         return self.read_uint('mux_sel')

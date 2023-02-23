@@ -54,8 +54,8 @@ class Accumulator(Block):
         """
         Get the current accumulation count.
 
-        :return count: Current accumulation count
-        :rtype count: int
+        :return: Current accumulation count
+        :rtype: int
         """
         return self.read_uint('acc_cnt')
    
@@ -64,8 +64,8 @@ class Accumulator(Block):
         Block until a new accumulation completes, then return
         the count index.
 
-        :return count: Current accumulation count
-        :rtype count: int
+        :return: Current accumulation count
+        :rtype: int
         """
         cnt0 = self.get_acc_cnt()
         cnt1 = self.get_acc_cnt()

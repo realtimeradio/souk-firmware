@@ -127,8 +127,8 @@ class Eth(Block):
         """
         Get the approximate packet rate, in packets-per-second.
 
-        :return pps: Approximate number of packets sent in the last second.
-        :rtype pps: int
+        :return: Approximate number of packets sent in the last second.
+        :rtype: int
         """
         v, _ = self.get_status()
         c0 = v['tx_ctr']

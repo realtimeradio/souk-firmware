@@ -80,14 +80,14 @@ class Sync(Block):
     def get_latency(self):
         """
         :return: Number of FPGA clock ticks between sync transmission and reception
-        :rtype int:
+        :rtype: int
         """
         return self.read_uint('latency') & 0xff
 
     def get_error_count(self):
         """
         :return: Number of sync errors.
-        :rtype int:
+        :rtype: int
         """
         return self.read_uint('latency') >> 8
 
@@ -298,7 +298,7 @@ class Sync(Block):
         Get the internal TT of the last system sync event.
 
         :return: tt. The internal TT of the last sync.
-        :rtype int:
+        :rtype: int
         """
         tt = (self.read_uint('tt_sync_msb') << 32) + self.read_uint('tt_sync_lsb')
         return tt

@@ -38,7 +38,7 @@ class Output(Block):
         Get the current output mode.
 
         :return: string describing output mode, eg. "CORDIC"
-        :rval: str
+        :rtype: str
         """
         v = self.read_uint('sel')
         try:

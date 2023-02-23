@@ -47,7 +47,7 @@ class Fpga(Block):
         """
         Read the firmware version register and return the contents as a string.
 
-        :return version: major_version.minor_version.revision.bugfix
+        :return: major_version.minor_version.revision.bugfix
         :rtype str:
         """
         v = self.read_uint('version_version')
@@ -61,8 +61,8 @@ class Fpga(Block):
         """
         Read the firmware type register and return the contents as an integer.
 
-        :return type: Firmware type
-        :rtype str:
+        :return: Firmware type
+        :rtype: str
         """
         return self.read_uint('version_type')
 
@@ -70,10 +70,10 @@ class Fpga(Block):
         """
         Read the UNIX time at which the current firmware was built.
 
-        :return build_time: Seconds since the UNIX epoch at which the running
+        :return: Seconds since the UNIX epoch at which the running
             firmware was built.
 
-        :rtype int:
+        :rtype: int
         """
         t = self.read_uint('version_timestamp')
         return t
@@ -91,8 +91,8 @@ class Fpga(Block):
         """
         Fetch the connected antenna name.
 
-        :return self.antname: The name of the connected antennna.
-        :rtype str:
+        :return: The name of the connected antennna.
+        :rtype: str
         """
         return self.antname
 
