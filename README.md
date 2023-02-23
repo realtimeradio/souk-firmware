@@ -19,5 +19,5 @@ git submodule update --init --recursive
 ## Repository Layout
 
  - `firmware/` -- Firmware source files and libraries
- - `software/` -- Libraries providing communication to ADM-PCIe-9H7 hardware and firmware
+ - `software/` -- Libraries providing communication to FPGA hardware and firmware
  - `docs/` -- Documentation
