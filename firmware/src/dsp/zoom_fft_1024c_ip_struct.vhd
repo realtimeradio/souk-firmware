@@ -9,7 +9,7 @@ entity zoom_fft_1024c_ip_struct is
     sync  : in std_logic_vector( 1-1 downto 0 );
     clk_1 : in std_logic;
     ce_1  : in std_logic;
-    dout  : out std_logic_vector( 576-1 downto 0 );
+    dout  : out std_logic_vector( 36-1 downto 0 );
     overflow : out std_logic_vector( 1-1 downto 0 );
     vld_out  : out std_logic_vector( 1-1 downto 0 );
     sync_out : out std_logic_vector( 1-1 downto 0 )
@@ -23,7 +23,7 @@ architecture structural of zoom_fft_1024c_ip_struct is
       shift : in std_logic_vector( 32-1 downto 0 );
       sync  : in std_logic_vector( 1-1 downto 0 );
       clk   : in std_logic;
-      dout  : out std_logic_vector( 576-1 downto 0 );
+      dout  : out std_logic_vector( 36-1 downto 0 );
       overflow : out std_logic_vector( 1-1 downto 0 );
       vld_out  : out std_logic_vector( 1-1 downto 0 );
       sync_out : out std_logic_vector( 1-1 downto 0 )
