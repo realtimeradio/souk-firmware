@@ -216,6 +216,15 @@ class SoukMkidReadout():
                                 n_chans_out=2048,
                                 n_parallel_chans_in=16,
                             )
+        #: Control interface to Zoom FFT
+        self.zoomfft      = pfb.Pfb(self._cfpga, 'zoom_fft',
+                               fftshift=0xffffffff
+                            )
+        #: Control interface to Zoom FFT Power Accumulator
+        self.zoomacc      = accumulator.Accumulator(self._cfpga, 'zoom_acc',
+                                    n_chans=1024,
+                                    n_parallel_chans=1,
+                            )
         #: Control interface to Mixer block
         self.mixer        = mixer.Mixer(self._cfpga, 'mix',
                                 n_chans=2048,
@@ -265,6 +274,8 @@ class SoukMkidReadout():
             #'eq'        : self.eq,
             'pfbtvg'     : self.pfbtvg,
             'chanselect' : self.chanselect,
+            'zoomfft'    : self.zoomfft,
+            'zoomacc'    : self.zoomacc,
             'mixer'      : self.mixer,
             #'packetizer': self.packetizer,
             #'eth'       : self.eth,
