@@ -1,7 +1,7 @@
 hosts:
   - rfsoc4x2
 
-fpgfile: /home/jackh/src/souk-firmware/firmware/src/souk_single_pipeline_4x2/outputs/souk_single_pipeline_4x2_2023-03-14_1418.fpg
+fpgfile: /home/jackh/src/souk-firmware/firmware/src/souk_single_pipeline_4x2/outputs/souk_single_pipeline_4x2_2023-03-14_1706.fpg
 lmkfile: rfsoc4x2_PL_122M88_REF_245M76.txt
 lmxfile: rfsoc4x2_LMX_REF_245M76_OUT_491M52.txt
 
