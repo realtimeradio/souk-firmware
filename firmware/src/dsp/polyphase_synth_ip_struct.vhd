@@ -2,7 +2,7 @@ library IEEE;
 use IEEE.std_logic_1164.all;
 library xil_defaultlib;
 use xil_defaultlib.conv_pkg.all;
-entity nospfb_2x_4096c_8i_16o_ip_struct is
+entity polyphase_synth_ip_struct is
   port (
     din   : in std_logic_vector( 256-1 downto 0 );
     shift : in std_logic_vector( 32-1 downto 0 );
@@ -13,10 +13,10 @@ entity nospfb_2x_4096c_8i_16o_ip_struct is
     overflow : out std_logic_vector( 1-1 downto 0 );
     sync_out : out std_logic_vector( 1-1 downto 0 )
   );
-end nospfb_2x_4096c_8i_16o_ip_struct;
+end polyphase_synth_ip_struct;
 
-architecture structural of nospfb_2x_4096c_8i_16o_ip_struct is
-  component nospfb_2x_4096c_8i_16o
+architecture structural of polyphase_synth_ip_struct is
+  component polyphase_synth
     port (
       din   : in std_logic_vector( 256-1 downto 0 );
       shift : in std_logic_vector( 32-1 downto 0 );
@@ -28,7 +28,7 @@ architecture structural of nospfb_2x_4096c_8i_16o_ip_struct is
     );
   end component;
 begin
-  nospfb_2x_4096c_8i_16o_ip_inst : nospfb_2x_4096c_8i_16o
+  polyphase_synth_ip_inst : polyphase_synth
   port map (
     din => din,
     shift    => shift, 
