@@ -31,7 +31,8 @@ input_spec  = np.zeros([NTAPS*NTAPS, NFFT], dtype=complex)
 input_spec[:,1] = np.exp(2*np.pi * 1j * t/(NTAPS))
 input_spec[:,NFFT//4] = np.exp(2*np.pi * 1j * t/(NTAPS))
 
-tseries = ifft(input_spec, axis=1)
+tseries = fft(input_spec, axis=1)
+tseries = tseries[:,::-1] # Flip here instead of using IFFT
 tseries = tseries.flatten()
 
 tout = np.zeros(NTAPS * NFFT, dtype=complex)
