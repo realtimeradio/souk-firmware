@@ -8,3 +8,5 @@ nospfb_2x_4096c_8i_16o/*
 !nospfb_2x_4096c_8i_16o/*.dcp
 zoom_fft_1024c/*
 !zoom_fft_1024c/*.dcp
+polyphase_synth/*
+!polyphase_synth/*.dcp
