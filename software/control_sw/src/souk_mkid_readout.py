@@ -229,7 +229,8 @@ class SoukMkidReadout():
         self.mixer        = mixer.Mixer(self._cfpga, 'mix',
                                 n_chans=2048,
                                 n_parallel_chans=8,
-                                phase_bp=31,
+                                phase_bp=30,
+                                phase_offset_bp=31,
                             )
         #: Control interface to Accumulator Blocks
         self.accumulators   =  []
@@ -247,6 +248,8 @@ class SoukMkidReadout():
         self.gen_cordic    = generator.Generator(self._cfpga, 'cordic_gen')
         #: Control interface to LUT generators
         self.gen_lut       = generator.Generator(self._cfpga, 'lut_gen')
+        #: Control interface to Polyphase Synthesizer block
+        self.pfs           = pfb.Pfb(self._cfpga, 'psb', fftshift=0xffffffff)
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, 'output')
         ##: Control interface to Packetizer block
@@ -276,7 +279,8 @@ class SoukMkidReadout():
             'chanselect' : self.chanselect,
             'zoomfft'    : self.zoomfft,
             'zoomacc'    : self.zoomacc,
-            'mixer'      : self.mixer,
+						'mixer'      : self.mixer,
+            'pfs'        : self.pfs,
             #'packetizer': self.packetizer,
             #'eth'       : self.eth,
             'autocorr'     : self.autocorr,
