@@ -118,7 +118,7 @@ class Mixer(Block):
         inc_regname = f'lo{p}_phase_inc'
         offset_regname = f'lo{p}_phase_offset'
         # Read increment reg and mask off enable bit
-        inc_val = = self.read_uint(inc_regname, word_offset=s)
+        inc_val = self.read_uint(inc_regname, word_offset=s)
         enabled = bool(inc_val >> 31)
         phase_step = inc_val & (2**31 - 1)
         if phase_step > 2**30:

@@ -53,6 +53,7 @@ class SoukMkidReadout():
         #: configuration YAML file
         self.configfile = configfile
         self.config = {}
+        self.adc_clk_mhz = None
         #: Underlying CasperFpga control instance
         self._cfpga = casperfpga.CasperFpga(
                         host=self.hostname,
@@ -94,6 +95,7 @@ class SoukMkidReadout():
             self.logger.exception(f"Failed to parse config file {f}")
             raise
         self.fpgfile = self.config.get('fpgfile', self.fpgfile)
+        self.adc_clk_mhz = self.config.get('adc_clk_mhz', None)
         if self.fpgfile is not None:
             self.read_fpg(self.fpgfile)
         
