@@ -26,22 +26,27 @@ def get_coeffs(ntaps, nfft, window_func=np.hanning):
     coeffs = sinc * window
     return coeffs
 
-t = np.arange(NTAPS*NTAPS)*0.2
+t0 = np.arange(NTAPS*NTAPS)*0.0 # At bin center
+t1 = np.arange(NTAPS*NTAPS)*0.5 # offset by half a bin
 input_spec  = np.zeros([NTAPS*NTAPS, NFFT], dtype=complex)
-input_spec[:,1] = np.exp(2*np.pi * 1j * t/(NTAPS))
-input_spec[:,NFFT//4] = np.exp(2*np.pi * 1j * t/(NTAPS))
+#input_spec[:,1] = np.exp(2*np.pi * 1j * t0/(NTAPS))
+input_spec[:,2] = np.exp(2*np.pi * 1j * t1/(NTAPS))
 
 tseries = fft(input_spec, axis=1)
-tseries = tseries[:,::-1] # Flip here instead of using IFFT
+# Not flipping here will flip the + and - frequencies
+#tseries = tseries[:,::-1] # Flip here instead of using IFFT
 tseries = tseries.flatten()
 
-tout = np.zeros(NTAPS * NFFT, dtype=complex)
+tout = np.zeros([NTAPS, NFFT], dtype=complex)
 
 coeffs = get_coeffs(NTAPS, NFFT)
 for i in range(NTAPS):
     v = tseries[i*NFFT:i*NFFT + NTAPS*NFFT] * coeffs
     for t in range(NTAPS):
-        tout[i*NFFT:(i+1)*NFFT] += v[t*NFFT:(t+1)*NFFT][::-1]
+        tout[i] += v[t*NFFT:(t+1)*NFFT]
+
+tout = tout[:,::-1] # Reverse blocks of NFFT samples (flips frequency direction)
+tout = tout.flatten()
 
 output_spec_filt = np.abs(fftshift(fft(tout*get_coeffs(1,NTAPS*NFFT))))**2
 output_spec_nofilt = np.abs(fftshift(fft(tseries[0:NTAPS*NFFT]*get_coeffs(1,NTAPS*NFFT))))**2
