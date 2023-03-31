@@ -29,8 +29,8 @@ function polyphase_synth_config(this_block)
   if (this_block.inputTypesKnown)
     % do input type checking, dynamic output type and generic setup in this code block.
 
-    if (this_block.port('din').width ~= 256);
-      this_block.setError('Input data type for port "din" must have width=256.');
+    if (this_block.port('din').width ~= 288);
+      this_block.setError('Input data type for port "din" must have width=288.');
     end
     if (this_block.port('shift').width ~= 32);
       this_block.setError('Input data type for port "shift" must have width=32.');
