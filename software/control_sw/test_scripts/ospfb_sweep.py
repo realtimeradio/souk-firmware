@@ -12,11 +12,11 @@ CONFIGFILE = '/home/jackh/src/souk-firmware/software/control_sw/config/souk-sing
 def set_output_freq(r, f, lut=False):
     if lut:
         r.output.use_lut()
-        r.gen_lut.set_output_freq(0, f, 1966.08, 0.25)
+        r.gen_lut.set_output_freq(0, f, r.adc_clk_mhz, 0.25)
     else:
         r.output.use_cordic()
         for i in range(4):
-            r.gen_cordic.set_output_freq(i, f, 1966.08)
+            r.gen_cordic.set_output_freq(i, f, r.adc_clk_mhz)
         r.gen_cordic.reset_phase()
 
 def scan_bin(r, n, p=50, b=4):
@@ -27,11 +27,13 @@ def scan_bin(r, n, p=50, b=4):
       p: Number of frequency points to plot
       b: Number of PFB bins to sweep over
     """
-    df = 1966.08 / 2048 / 2
+    df = r.adc_clk_mhz / 2048 / 2
+    print(f'Using ADC clk {r.adc_clk_mhz} MHz')
+    print(f'Bin separation is {df} MHz')
     freqs = np.linspace((n-b//2)*df, (n+b//2)*df, p)
     d = np.zeros([b, p])
     for fn, freq in enumerate(freqs):
-        print(f"Sweeping tone {fn+1} of {p}", end=' ')
+        print(f"Sweeping tone {fn+1} of {p} ({freq:.3f} MHz)", end=' ')
         set_output_freq(r, freq)
         x = np.fft.fftshift(r.autocorr.get_new_spectra(0, True)[0])
         binstart = 2048 + n - b//2
@@ -58,6 +60,8 @@ def main(host, configfile):
     r.input.enable_loopback()
     r.pfb.set_fftshift(0xffffffff)
     r.autocorr.set_acc_len(1000)
+    r.sync.arm_sync()
+    r.sync.sw_sync()
     overflow_before = r.pfb.get_overflow_count()
     plot_scan(r, 100, 200, 6)
     overflow_after = r.pfb.get_overflow_count()
