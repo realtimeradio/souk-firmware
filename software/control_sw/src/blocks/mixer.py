@@ -62,6 +62,53 @@ class Mixer(Block):
         """
         return bool(self.read_int('power_en'))
 
+    def set_chan_freq(self, chan, freq_offset_hz=None, phase_offset=0, sample_rate_mhz=2500):
+        """
+        Set the frequency of output channel `chan`.
+
+        :param chan: The channel index to which this phase-rate should be applied
+        :type chan: int
+
+        :param freq_offset_hz: The frequency offset, in Hz, from the channel center.
+            If None, disable this oscillator.
+        :type freq_offset_hz: float
+
+        :param phase_offset: The phase offset at which this oscillator should start
+            in units of radians.
+        :type phase: float
+
+        :param sample_rate_mhz: DAC sample rate, in MHz
+        :type sample_rate_mhz: float
+
+        """
+        fft_period_s = self.n_chans / (sample_rate_mhz * 1e6) # seconds
+        fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
+        phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
+        self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset)
+
+    def add_freq(self, freq_hz, phase_offset=0, sample_rate_mhz=2500):
+        """
+        Add a frequency to the output.
+
+        :param freq_hz: The frequency, in Hz, to emit.
+        :type freq_offset_hz: float
+
+        :param phase_offset: The phase offset at which this oscillator should start
+            in units of radians.
+        :type phase: float
+
+        :param sample_rate_mhz: DAC sample rate, in MHz
+        :type sample_rate_mhz: float
+
+        """
+        fft_period_s = self.n_chans / (sample_rate_mhz * 1e6) # seconds
+        fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
+        # Split target frequency into FFT bin number and offset
+        chan = int(round(freq_hz / fft_rbw_hz))
+        chan_offset_hz = freq_hz - (chan * fft_rbw_hz)
+        self._info(f"Placing tone in channel {chan} with an offset of {chan_offset_hz} Hz")
+        self.set_chan_freq(chan, freq_offset_hz=chan_offset_hz, phase_offset=phase_offset, sample_rate_mhz=sample_rate_mhz)
+
     def set_phase_step(self, chan, phase=None, phase_offset=0.0):
         """
         Set the phase increment to apply on each successive sample for
@@ -92,12 +139,12 @@ class Mixer(Block):
             phase_scaled = phase / np.pi
             phase_scaled = ((phase_scaled + 1) % 2) - 1
             phase_scaled = int(phase_scaled * 2**self._phase_bp)
-            # Mask top bit for enable
-            if phase_scaled < 0:
-                phase_scaled_uint = phase_scaled + 2**32
-            else:
-                phase_scaled_uint = phase_scaled
-        self.write_int(inc_regname, (enable_bit << 31) + phase_scaled, word_offset=s)
+        # Mask top bit for enable
+        if phase_scaled < 0:
+            phase_scaled_uint = phase_scaled + 2**(self._phase_bp + 1)
+        else:
+            phase_scaled_uint = phase_scaled
+        self.write_int(inc_regname, (enable_bit << 31) + phase_scaled_uint, word_offset=s)
         phase_offset_scaled = phase_offset / np.pi
         phase_offset_scaled = ((phase_offset_scaled + 1) % 2) - 1
         phase_offset_scaled = int(phase_offset_scaled * 2**self._phase_offset_bp)

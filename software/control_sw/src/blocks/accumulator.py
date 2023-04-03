@@ -129,13 +129,14 @@ class Accumulator(Block):
         """
         from matplotlib import pyplot as plt
         spec = self.get_new_spectra()
+        #Will probably want to FFTshift.... spec = np.fft.fftshift(spec)
         if power:
             spec = np.abs(spec)**2
             f, ax = plt.subplots(1,1)
             ax.set_xlabel('Frequency Channel')
             if db:
                 ax.set_ylabel('Power [dB]')
-                specs = 10*np.log10(np.abs(spec))
+                spec = 10*np.log10(np.abs(spec))
             else:
                 ax.set_ylabel('Power [linear]')
             ax.plot(spec)
