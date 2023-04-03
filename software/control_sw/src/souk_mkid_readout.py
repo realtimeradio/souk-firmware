@@ -226,6 +226,8 @@ class SoukMkidReadout():
         self.zoomacc      = accumulator.Accumulator(self._cfpga, 'zoom_acc',
                                     n_chans=1024,
                                     n_parallel_chans=1,
+                                    dtype='>u8',
+                                    is_complex=False,
                             )
         #: Control interface to Mixer block
         self.mixer        = mixer.Mixer(self._cfpga, 'mix',
@@ -239,11 +241,15 @@ class SoukMkidReadout():
         self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc0',
                                     n_chans=2048,
                                     n_parallel_chans=8,
+                                    dtype='>i4',
+                                    is_complex=True,
                                 )
                                ]
         self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc1',
                                     n_chans=2048,
                                     n_parallel_chans=8,
+                                    dtype='>i4',
+                                    is_complex=True,
                                 )
                                ]
         #: Control interface to CORDIC generators

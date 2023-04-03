@@ -36,12 +36,22 @@ class Accumulator(Block):
         module in parallel.
     :type n_parallel_chans: int
 
+    :param is_complex: If True, block accumulates complex-valued data.
+    :type is_complex: Bool
+
+    :param dtype: Data type string (as recognised by numpy's `frombuffer` method)
+        for accumulated data. If data are complex, this is the data type of
+        one of a single real/imag component.
+    :type dtype: str
+
     """
     def __init__(self, host, name,
                  acc_len=2**15,
                  logger=None,
                  n_chans=4096,
                  n_parallel_chans=8,
+                 is_complex=True,
+                 dtype='>i4'
                 ):
         super(Accumulator, self).__init__(host, name, logger)
         self.n_chans = n_chans
@@ -49,6 +59,8 @@ class Accumulator(Block):
         self._default_acc_len = acc_len
         assert n_chans % n_parallel_chans == 0
         self._n_serial_chans = n_chans // n_parallel_chans
+        self._dtype = dtype
+        self._is_complex = is_complex
 
     def get_acc_cnt(self):
         """
@@ -87,12 +99,18 @@ class Accumulator(Block):
         """
         dout = np.zeros(self.n_chans, dtype=np.complex)
         start_acc_cnt = self.get_acc_cnt()
+        wordsize = np.dtype(self._dtype).itemsize
+        if self._is_complex:
+            wordsize *= 2
         for i in range(self._n_parallel_chans):
             ramname = f'dout{i}'
-            d = np.frombuffer(self.read(ramname, self._n_serial_chans*4*2), dtype='>i4')
+            d = np.frombuffer(self.read(ramname, self._n_serial_chans*wordsize), dtype=self._dtype)
             for j in range(self._n_serial_chans):
-                dout.real[self._n_parallel_chans * j + i] = d[2*j]
-                dout.imag[self._n_parallel_chans * j + i] = d[2*j + 1]
+                if self._is_complex:
+                    dout.real[self._n_parallel_chans * j + i] = d[2*j]
+                    dout.imag[self._n_parallel_chans * j + i] = d[2*j + 1]
+                else:
+                    dout.real[self._n_parallel_chans * j + i] = d[j]
         stop_acc_cnt = self.get_acc_cnt()
         if start_acc_cnt != stop_acc_cnt:
             self._warning('Accumulation counter changed while reading data!')
@@ -110,7 +128,7 @@ class Accumulator(Block):
         return self._read_bram()
 
 
-    def plot_spectra(self, power=True, db=True, show=True):
+    def plot_spectra(self, power=True, db=True, show=True, fftshift=True, sample_rate_mhz=None):
         """
         Plot the spectra of all signals in a single signal_block,
         with accumulation length divided out
@@ -124,37 +142,53 @@ class Accumulator(Block):
         :param show: If True, call matplotlib's `show` after plotting
         :type show: bool
 
+        :param fftshift: If True, fftshift data before plotting.
+        :type fftshift: bool
+
+        :param sample_rate_mhz: Effective FFT input sampling rate, in MHz.
+            If provided, generate an appropriate frequency axis
+        :type sample_rate_mhz: float
+
         :return: matplotlib.Figure
 
         """
         from matplotlib import pyplot as plt
         spec = self.get_new_spectra()
-        #Will probably want to FFTshift.... spec = np.fft.fftshift(spec)
+        if sample_rate_mhz is None:
+            x = np.arange(self.n_chans)
+            xlabel = 'Frequency Channel'
+        else:
+            x = np.fft.fftfreq(self.n_chans, 1/sample_rate_mhz)
+            xlabel = 'Frequency (MHz)'
+        if fftshift:
+            spec = np.fft.fftshift(spec)
+            x = np.fft.fftshift(x)
         if power:
-            spec = np.abs(spec)**2
+            if self._is_complex:
+                spec = np.abs(spec)**2
             f, ax = plt.subplots(1,1)
-            ax.set_xlabel('Frequency Channel')
+            ax.set_xlabel(xlabel)
             if db:
                 ax.set_ylabel('Power [dB]')
                 spec = 10*np.log10(np.abs(spec))
             else:
                 ax.set_ylabel('Power [linear]')
-            ax.plot(spec)
+            ax.plot(x, spec)
         else:
             f, ax = plt.subplots(3,1)
             plt.subplot(3,1,1)
             plt.plot(spec.real, label='real')
             plt.plot(spec.imag, label='imag')
             plt.legend()
-            plt.xlabel('Frequency Channel')
+            plt.xlabel(xlabel)
             plt.subplot(3,1,2)
-            plt.plot(np.abs(spec))
+            plt.plot(x, np.abs(spec))
             plt.ylabel('Amplitude')
-            plt.xlabel('Frequency Channel')
+            plt.xlabel(xlabel)
             plt.subplot(3,1,3)
-            plt.plot(np.angle(spec))
+            plt.plot(x, np.angle(spec))
             plt.ylabel('Phase [rads]')
-            plt.xlabel('Frequency Channel')
+            plt.xlabel(xlabel)
         if show:
             plt.show()
         return f
