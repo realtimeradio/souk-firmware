@@ -30,6 +30,7 @@ class Mixer(Block):
             n_parallel_chans=4,
             phase_bp=31,
             phase_offset_bp=31,
+            n_scale_bits=8,
             logger=None):
         super(Mixer, self).__init__(host, name, logger)
         self.n_chans = n_chans
@@ -38,6 +39,7 @@ class Mixer(Block):
         self._n_serial_chans = n_chans // n_parallel_chans
         self._phase_bp = phase_bp
         self._phase_offset_bp = phase_offset_bp
+        self.n_scale_bits = n_scale_bits
 
     def enable_power_mode(self):
         """
@@ -86,7 +88,7 @@ class Mixer(Block):
         phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
         self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset)
 
-    def add_freq(self, freq_hz, phase_offset=0, sample_rate_mhz=2500):
+    def add_freq(self, freq_hz, phase_offset=0, sample_rate_mhz=2500, scaling=1.0):
         """
         Add a frequency to the output.
 
@@ -100,6 +102,9 @@ class Mixer(Block):
         :param sample_rate_mhz: DAC sample rate, in MHz
         :type sample_rate_mhz: float
 
+        :param scaling: optional scaling (<=1) to apply to the output tone amplitude.
+        :type scaling: float
+
         """
         fft_period_s = self.n_chans / (sample_rate_mhz * 1e6) # seconds
         fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
@@ -108,6 +113,29 @@ class Mixer(Block):
         chan_offset_hz = freq_hz - (chan * fft_rbw_hz)
         self._info(f"Placing tone in channel {chan} with an offset of {chan_offset_hz} Hz")
         self.set_chan_freq(chan, freq_offset_hz=chan_offset_hz, phase_offset=phase_offset, sample_rate_mhz=sample_rate_mhz)
+
+    def set_amplitude_scale(self, chan, scale=1.0):
+        """
+        Apply an amplitude scaling <=1 to an output channel.
+
+        :param chan: The channel index to which this phase-rate should be applied
+        :type chan: int
+
+        :param scaling: optional scaling (<=1) to apply to the output tone amplitude.
+        :type scaling: float
+        """
+        p = chan % self._n_parallel_chans  # Parallel stream number
+        s = chan // self._n_parallel_chans # Serial channel position
+        regname = f'lo{p}_phase_scale'
+        assert scale > 0
+        # convert to uint
+        scale *= 2**self._n_scale_bits
+        scale = round(scale)
+        # saturate
+        scale_max = 2**self._n_scale_bits - 1
+        if scale > scale_max:
+            scale = scale_max
+        self.write_int(regname, scale, word_offset=s)
 
     def set_phase_step(self, chan, phase=None, phase_offset=0.0):
         """
@@ -192,3 +220,4 @@ class Mixer(Block):
             self.disable_power_mode()
             for i in range(self.n_chans):
                 self.set_phase_step(i, phase=None)
+                self.set_amplitude_scale(i, 1)
