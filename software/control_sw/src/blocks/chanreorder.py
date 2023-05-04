@@ -24,6 +24,10 @@ class ChanReorder(Block):
     :param n_parallel_chans_in: Number of channels handled in parallel at the input
     :type n_parallel_chans_in: int
 
+    :param support_zeroing: If True, allow the use of channel index ``-1`` to mean
+        "zero out this channel"
+    :type support_zeroing: bool
+
     """
     _map_format = 'i4' # CASPER library-defined map word format
     _map_reg = 'map1' # CASPER library-defined map name in reorder block
@@ -31,11 +35,17 @@ class ChanReorder(Block):
             n_chans_in=4096,
             n_chans_out=2048,
             n_parallel_chans_in=4,
+            support_zeroing=False,
             logger=None):
         super(ChanReorder, self).__init__(host, name, logger)
         assert n_chans_in % n_parallel_chans_in == 0
-        # firmware uses 1 byte mux inputs, so breaks if >256 inputs
-        assert np.log2(n_parallel_chans_in) <= 256
+        # firmware uses 1 byte mux inputs, so breaks if >256 inputs,
+        # or >255 inputs when using one input for zeros
+        if not support_zeroing:
+            assert np.log2(n_parallel_chans_in) <= 256
+        else:
+            assert np.log2(n_parallel_chans_in) <= 256-1
+        self.support_zeroing = support_zeroing
         self.n_chans_in = n_chans_in
         self.n_chans_out = n_chans_out
         self._n_parallel_chans_in = n_parallel_chans_in
@@ -67,6 +77,9 @@ class ChanReorder(Block):
         # Check the output chans are all in the input
         for outchan in outmap:
             if outchan >= self.n_chans_in:
+                # Allow -1 as a special case, meaning "set this output to 0"
+                if self.support_zeroing and outchan == -1:
+                    continue
                 raise ValueError(f'Selected channel {outchan} not in input range')
 
         serial_maps = np.zeros([self._n_parallel_chans_in, self._n_serial_chans_in],
@@ -76,10 +89,14 @@ class ChanReorder(Block):
         # outn is where we want this channel in the output
         # outchan is where this channel is at the input
         for outn, outchan in enumerate(outmap):
-            # Which of the parallel input streams contains this channel
-            in_pstream = outchan % self._n_parallel_chans_in
-            # Which input serial position contains this channel
-            in_spos = outchan // self._n_parallel_chans_in
+            if outchan != -1:
+                # Which of the parallel input streams contains this channel
+                in_pstream = outchan % self._n_parallel_chans_in
+                # Which input serial position contains this channel
+                in_spos = outchan // self._n_parallel_chans_in
+            else:
+                in_pstream = self._n_parallel_chans_in + 1 # Special mux input tied to 0
+                in_spos = 0 # Doesn't matter since the channel isn't real
             # Which output parallel stream would we like outchan to be in
             out_pstream = outn % self._n_parallel_chans_out
             # Which output serial position would we like outchan to be in
@@ -144,5 +161,8 @@ class ChanReorder(Block):
         if read_only:
             pass
         else:
-            chan_order = np.arange(0, self.n_chans_in, 2) # output every other channel
+            if self.support_zeroing:
+                chan_order = np.ones(self.n_chans_out) * -1 # Disable everything
+            else:
+                chan_order = np.arange(0, self.n_chans_in, 2) # output every other channel
             self.set_channel_outmap(chan_order)

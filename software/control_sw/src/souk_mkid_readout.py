@@ -256,6 +256,20 @@ class SoukMkidReadout():
         self.gen_cordic    = generator.Generator(self._cfpga, 'cordic_gen')
         #: Control interface to LUT generators
         self.gen_lut       = generator.Generator(self._cfpga, 'lut_gen')
+        #: Control interface to Pre-Polyphase Synthesizer Reorder
+        self.pfs_chanselect   = chanreorder.ChanReorder(self._cfpga, 'synth_input_reorder',
+                                n_chans_in=2048,
+                                n_chans_out=2048,
+                                n_parallel_chans_in=8,
+                                support_zeroing=True
+                            )
+        #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
+        self.pfs_offset_chanselect = chanreorder.ChanReorder(self._cfpga, 'synth_offset_input_reorder',
+                                n_chans_in=2048,
+                                n_chans_out=2048,
+                                n_parallel_chans_in=8,
+                                support_zeroing=True
+                            )
         #: Control interface to Polyphase Synthesizer block
         self.pfs           = pfb.Pfb(self._cfpga, 'psb', fftshift=0xffffffff)
         #: Control interface to Output Multiplex block
@@ -288,6 +302,8 @@ class SoukMkidReadout():
             'zoomfft'    : self.zoomfft,
             'zoomacc'    : self.zoomacc,
 						'mixer'      : self.mixer,
+            'pfs_chanselect' : self.pfs_chanselect,
+            'pfs_offset_chanselect' : self.pfs_offset_chanselect,
             'pfs'        : self.pfs,
             #'packetizer': self.packetizer,
             #'eth'       : self.eth,
