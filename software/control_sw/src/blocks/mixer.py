@@ -126,7 +126,7 @@ class Mixer(Block):
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
-        regname = f'lo{p}_phase_scale'
+        regname = f'lo{p}_scale'
         assert scale > 0
         # convert to uint
         scale *= 2**self._n_scale_bits
