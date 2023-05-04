@@ -58,7 +58,24 @@ class Generator(Block):
         self.write(f'{n}_i', real.tobytes())
         self.write(f'{n}_q', imag.tobytes())
 
-    def set_output_freq(self, n, freq_mhz, sample_rate_mhz=5000., amplitude=1.):
+    def get_lut_output(self, n):
+        """
+        Get waveform stored in LUT output `n`.
+
+        :param n: Which generator to target.
+        :type n: int
+
+        :return: waveform
+        :rtype: numpy.ndarray
+        """
+        realraw = self.read(f'{n}_i', self.n_samples*2)
+        imagraw = self.read(f'{n}_q', self.n_samples*2)
+        real = np.frombuffer(realraw, dtype='>i2')
+        imag = np.frombuffer(imagraw, dtype='>i2')
+        return real + 1j*imag
+
+    def set_output_freq(self, n, freq_mhz, sample_rate_mhz=2457.6,
+                        amplitude=1., round_freq=True, window=False):
         """
         Set an output to a CW tone at a specific frequency.
 
@@ -74,10 +91,26 @@ class Generator(Block):
         :param amplitude: Set the output of amplitude of the CW signal. Only
             applicable for LUT-based generators
         :type amplitude: float
+
+        :param round_freq: If True, round ``freq_mhz`` to the nearest frequency which
+            can be represented with a ``self.n_samples`` circular buffer.
+            This option affects only LUT generators.
+        :type round_freq: bool
+
+        :param window: If True, apply a Hann (a.k.a. Hanning) window to data samples.
+            This option affects only LUT generators.
+        :type window: bool
         """
         if self.n_samples > 1:
             t = np.arange(self.n_samples) / sample_rate_mhz
+            if round_freq:
+                freq_step_mhz = sample_rate_mhz / self.n_samples
+                freq_mhz = round(freq_mhz / freq_step_mhz) * freq_step_mhz
+                self._info(f"Rounded frequency to {freq_mhz} to make continuous circular waveform")
             x = np.exp(1j*2*np.pi*freq_mhz*t) * amplitude
+            if window:
+                self._info("Appling Hann window")
+                x *= np.hanning(self.n_samples)
             self.set_lut_output(n, x)
         else:
             if amplitude != 1.0:
