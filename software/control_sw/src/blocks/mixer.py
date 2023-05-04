@@ -39,7 +39,7 @@ class Mixer(Block):
         self._n_serial_chans = n_chans // n_parallel_chans
         self._phase_bp = phase_bp
         self._phase_offset_bp = phase_offset_bp
-        self.n_scale_bits = n_scale_bits
+        self._n_scale_bits = n_scale_bits
 
     def enable_power_mode(self):
         """
