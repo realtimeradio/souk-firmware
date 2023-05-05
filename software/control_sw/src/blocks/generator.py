@@ -79,7 +79,7 @@ class Generator(Block):
         """
         Set an output to a CW tone at a specific frequency.
 
-        :param n: Which generator to target
+        :param n: Which generator to target. Use -1 to mean "all"
         :type n: int
 
         :param freq_mhz: Output frequency, in MHz
@@ -101,6 +101,13 @@ class Generator(Block):
             This option affects only LUT generators.
         :type window: bool
         """
+        if n == -1:
+           if self.n_generators is None:
+               self._get_block_params()
+           for i in range(self.n_generators):
+               self.set_output_freq(i, freq_mhz, sample_rate_mhz=sample_rate_mhz,
+                                    amplitude=amplitude, round_freq=round_freq, window=window)
+               return
         if self.n_samples > 1:
             t = np.arange(self.n_samples) / sample_rate_mhz
             if round_freq:
