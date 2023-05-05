@@ -107,7 +107,7 @@ class Generator(Block):
            for i in range(self.n_generators):
                self.set_output_freq(i, freq_mhz, sample_rate_mhz=sample_rate_mhz,
                                     amplitude=amplitude, round_freq=round_freq, window=window)
-               return
+           return
         if self.n_samples > 1:
             t = np.arange(self.n_samples) / sample_rate_mhz
             if round_freq:
