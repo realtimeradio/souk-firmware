@@ -112,6 +112,7 @@ class Mixer(Block):
         chan = int(round(freq_hz / fft_rbw_hz))
         chan_offset_hz = freq_hz - (chan * fft_rbw_hz)
         self._info(f"Placing tone in channel {chan} with an offset of {chan_offset_hz} Hz")
+        self.set_amplitude_scale(chan, scaling)
         self.set_chan_freq(chan, freq_offset_hz=chan_offset_hz, phase_offset=phase_offset, sample_rate_mhz=sample_rate_mhz)
 
     def set_amplitude_scale(self, chan, scale=1.0):

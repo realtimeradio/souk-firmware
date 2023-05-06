@@ -1,6 +1,8 @@
 import logging
 import yaml
+import numpy as np
 import casperfpga
+
 from . import helpers
 from . import __version__
 from .error_levels import *
@@ -25,7 +27,10 @@ from .blocks import output
 #from .blocks import corr
 #from .blocks import powermon
 
-    
+N_TONE = 2048 # Number of independent tones the design can generate
+N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
+N_RX_FFT = N_RX_OVERSAMPLE*2048 # Number of FFT points in RX channelizer 
+N_TX_FFT = 2048 # Number of FFT points in TX synthesizer (not including oversampling)
 
 class SoukMkidReadout():
     """
@@ -195,7 +200,7 @@ class SoukMkidReadout():
         #self.mask        = mask.Mask(self._cfpga, 'mask')
         #: Control interface to Autocorrelation block
         self.autocorr    = autocorr.AutoCorr(self._cfpga, 'autocorr',
-                               n_chans=4096,
+                               n_chans=N_RX_FFT,
                                n_signals=1,
                                n_parallel_streams=16,
                                n_cores=1,
@@ -206,7 +211,7 @@ class SoukMkidReadout():
         #: Control interface to post-PFB Test Vector Generator block
         self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, 'pfbtvg',
                                 n_inputs=1,
-                                n_chans=4096,
+                                n_chans=N_RX_FFT,
                                 n_serial_inputs=1,
                                 n_rams=4,
                                 n_samples_per_word=4,
@@ -214,8 +219,8 @@ class SoukMkidReadout():
                             )
         #: Control interface to Channel Reorder block
         self.chanselect   = chanreorder.ChanReorder(self._cfpga, 'chan_select',
-                                n_chans_in=4096,
-                                n_chans_out=2048,
+                                n_chans_in=N_RX_FFT,
+                                n_chans_out=N_TONE,
                                 n_parallel_chans_in=16,
                             )
         #: Control interface to Zoom FFT
@@ -231,7 +236,7 @@ class SoukMkidReadout():
                             )
         #: Control interface to Mixer block
         self.mixer        = mixer.Mixer(self._cfpga, 'mix',
-                                n_chans=2048,
+                                n_chans=N_TONE,
                                 n_parallel_chans=8,
                                 phase_bp=30,
                                 phase_offset_bp=31,
@@ -239,14 +244,14 @@ class SoukMkidReadout():
         #: Control interface to Accumulator Blocks
         self.accumulators   =  []
         self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc0',
-                                    n_chans=2048,
+                                    n_chans=N_TONE,
                                     n_parallel_chans=8,
                                     dtype='>i4',
                                     is_complex=True,
                                 )
                                ]
         self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc1',
-                                    n_chans=2048,
+                                    n_chans=N_TONE,
                                     n_parallel_chans=8,
                                     dtype='>i4',
                                     is_complex=True,
@@ -256,8 +261,24 @@ class SoukMkidReadout():
         self.gen_cordic    = generator.Generator(self._cfpga, 'cordic_gen')
         #: Control interface to LUT generators
         self.gen_lut       = generator.Generator(self._cfpga, 'lut_gen')
+        #: Control interface to Pre-Polyphase Synthesizer Reorder
+        self.pfs_chanselect   = chanreorder.ChanReorder(self._cfpga, 'synth_input_reorder',
+                                n_chans_in=N_TONE,
+                                n_chans_out=N_TX_FFT,
+                                n_parallel_chans_in=8,
+                                support_zeroing=True
+                            )
+        #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
+        self.pfs_offset_chanselect = chanreorder.ChanReorder(self._cfpga, 'synth_offset_input_reorder',
+                                n_chans_in=N_TONE,
+                                n_chans_out=N_TX_FFT,
+                                n_parallel_chans_in=8,
+                                support_zeroing=True
+                            )
         #: Control interface to Polyphase Synthesizer block
-        self.pfs           = pfb.Pfb(self._cfpga, 'psb', fftshift=0xffffffff)
+        self.pfs           = pfb.Pfb(self._cfpga, 'psb', fftshift=0b111)
+        #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
+        self.pfsoffset     = pfb.Pfb(self._cfpga, 'psboffset', fftshift=0b111)
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, 'output')
         ##: Control interface to Packetizer block
@@ -288,7 +309,10 @@ class SoukMkidReadout():
             'zoomfft'    : self.zoomfft,
             'zoomacc'    : self.zoomacc,
 						'mixer'      : self.mixer,
+            'pfs_chanselect' : self.pfs_chanselect,
+            'pfs_offset_chanselect' : self.pfs_offset_chanselect,
             'pfs'        : self.pfs,
+            'pfsoffset'  : self.pfsoffset,
             #'packetizer': self.packetizer,
             #'eth'       : self.eth,
             'autocorr'     : self.autocorr,
@@ -324,3 +348,72 @@ class SoukMkidReadout():
             self.logger.info("Performing software global reset")
             self.sync.arm_sync()
             self.sync.sw_sync()
+
+    def reset_pfs_outputs(self):
+        """
+        Zero out all synthesis bank outputs.
+        """
+        for synth in [self.pfs_chanselect, self.pfs_offset_chanselect]:
+            synth.initialize()
+
+    def set_tone(self, tone_id, freq_mhz, phase_offset_rads=0.0):
+        """
+        Configure both TX and RX paths for a tone at frequency ``freq_mhz``
+        with ID ``tone_id``.
+
+        :param tone_id: Index number of tone to set
+        :type tone_id: int
+
+        :param freq_mhz: Tone frequency, in MHz
+        :type freq_mhz: float
+
+        :param phase_offset_rads: Phase offset of tone, in radians.
+        :type phase_offset_rads: float
+        """
+
+        assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
+
+        ### Configure receiving side
+        # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
+        rx_bin_centers_mhz = np.fft.fftfreq(N_RX_FFT, 1./self.adc_clk_mhz)
+        rx_bin_centers_mhz += self.adc_clk_mhz/2. # account for upstream mixing
+        # Distance of freq_mhz from each bin center
+        rx_freq_bins_offset_mhz = freq_mhz - rx_bin_centers_mhz
+        # Index of nearest bin
+        rx_nearest_bin = np.argmin(np.abs(rx_freq_bins_offset_mhz))
+        # Put this bin in the correct tone slot
+        self.chanselect.set_single_channel(tone_id, rx_nearest_bin)
+        # Configure the mixer at this ID to the appropriate offset freq
+        rx_freq_offset_hz = rx_freq_bins_offset_mhz[rx_nearest_bin] * 1e6
+        self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
+                                 phase_offset=phase_offset_rads,
+                                 sample_rate_mhz=self.adc_clk_mhz)
+        
+        ### Configure transmit side
+        # Select appropriate transmission FFT bin number (x2 because there are 2 banks)
+        tx_bin_centers_mhz = np.fft.fftfreq(2*N_TX_FFT, 1./self.adc_clk_mhz)
+        tx_bin_centers_mhz += self.adc_clk_mhz/2. # account for downstream mixing
+        # Distance of desired tone from these centers
+        tx_freq_bins_offset_mhz = freq_mhz - tx_bin_centers_mhz
+        # Index of nearest bin
+        tx_nearest_bin = np.argmin(np.abs(tx_freq_bins_offset_mhz))
+        # Even numbered bins are associated with the non-offset synth.
+        # Off bins are associated with the half-bin offset synth
+        use_offset_bank = bool(tx_nearest_bin % 2)
+        # Splitting the bins between banks means the index within a bank is halved
+        tx_nearest_bin = tx_nearest_bin // 2
+        # Disable anywhere either synthesizer is already using this tone ID
+        # TODO: is this the best behaviour?
+        for synth in [self.pfs_chanselect, self.pfs_offset_chanselect]:
+            chanmap = synth.get_channel_outmap()
+            for b in np.where(chanmap == tone_id)[0]:
+                synth.set_single_channel(b, -1)
+        # Get index of nearest bin, and place tone in this bin for relevant
+        # synth bank.
+        if use_offset_bank:
+            self.logger.info("Using offset filter bank")
+            synth_reorder = self.pfs_offset_chanselect
+        else:
+            self.logger.info("Using centered filter bank")
+            synth_reorder = self.pfs_chanselect
+        synth_reorder.set_single_channel(tx_nearest_bin, tone_id)
