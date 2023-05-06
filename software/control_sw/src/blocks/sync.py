@@ -37,7 +37,7 @@ class Sync(Block):
 
         self.offset_ns = 0.0
 
-        self.sync_wait_timeout_limit_s = 0.5
+        self.sync_wait_timeout_limit_s = 1.2
         self.sync_wait_sleep_period_s = 0.0005
     
     def uptime(self):

@@ -95,7 +95,7 @@ class ChanReorder(Block):
                 # Which input serial position contains this channel
                 in_spos = outchan // self._n_parallel_chans_in
             else:
-                in_pstream = self._n_parallel_chans_in + 1 # Special mux input tied to 0
+                in_pstream = 0 # Doesn't matter since the channel isn't real
                 in_spos = 0 # Doesn't matter since the channel isn't real
             # Which output parallel stream would we like outchan to be in
             out_pstream = outn % self._n_parallel_chans_out
@@ -104,7 +104,11 @@ class ChanReorder(Block):
             # build maps appropriately
             self._debug(f'Chan {outchan} Setting input {in_pstream}:{in_spos} to {out_pstream}:{out_spos}')
             serial_maps[in_pstream, out_spos] = in_spos
-            parallel_maps[out_spos, out_pstream] = in_pstream
+            if outchan != -1:
+                parallel_maps[out_spos, out_pstream] = in_pstream
+            else:
+                # Use special mux input which is tied to 0
+                parallel_maps[out_spos, out_pstream] = self._n_parallel_chans_in + 1
         for i in range(self._n_parallel_chans_in):
             self.write(f'reorder_{i}_{self._map_reg}', serial_maps[i].tobytes())
         self.write('pmap', parallel_maps.reshape(self.n_chans_out).tobytes())
@@ -141,12 +145,37 @@ class ChanReorder(Block):
             out_spos = outn // self._n_parallel_chans_out
             # Which input parallel stream was feeding out_pstream?
             in_pstream = parallel_maps[out_spos, out_pstream]
-            # Which input serial position was feeding out_spos
-            in_stream = serial_maps[in_pstream, out_spos]
-            # convert to an input channel number
-            in_chan = in_stream * self._n_parallel_chans_in + in_pstream
+            # Catch special case where input is disabled
+            if in_pstream == self._n_parallel_chans_in + 1:
+                in_chan = -1 # -1 indicates disabled
+            else:
+                # Which input serial position was feeding out_spos
+                in_stream = serial_maps[in_pstream, out_spos]
+                # convert to an input channel number
+                in_chan = in_stream * self._n_parallel_chans_in + in_pstream
             outmap[outn] = in_chan
         return outmap
+
+    def set_single_channel(self, outidx, inidx):
+        """
+        Set output channel number ``outidx`` to input number ``inidx``.
+        Do this by reading the total channel map, modifying a single entry,
+        and writing back.
+
+        Example usage:
+            # Set the first channel out of the reorder to 33
+            ```set_single_channel(0, 33)``
+
+        :param outidx: Index of output channel to set.
+        :type outidx: int
+
+        :param inidx: Input channel index to select.
+        :type inidx: int
+        """
+        self._info(f'Setting output {outidx} to channel {inidx}')
+        chanmap = self.get_channel_outmap()
+        chanmap[outidx] = inidx
+        self.set_channel_outmap(chanmap)
         
 
     def initialize(self, read_only=False):
