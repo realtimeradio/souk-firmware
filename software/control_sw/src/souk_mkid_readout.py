@@ -58,7 +58,7 @@ class SoukMkidReadout():
         #: configuration YAML file
         self.configfile = configfile
         self.config = {}
-        self.adc_clk_mhz = None
+        self.adc_clk_hz = None
         #: Underlying CasperFpga control instance
         self._cfpga = casperfpga.CasperFpga(
                         host=self.hostname,
@@ -100,7 +100,7 @@ class SoukMkidReadout():
             self.logger.exception(f"Failed to parse config file {f}")
             raise
         self.fpgfile = self.config.get('fpgfile', self.fpgfile)
-        self.adc_clk_mhz = self.config.get('adc_clk_mhz', None)
+        self.adc_clk_hz = self.config.get('adc_clk_hz', None)
         if self.fpgfile is not None:
             self.read_fpg(self.fpgfile)
         
@@ -282,7 +282,7 @@ class SoukMkidReadout():
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, 'output')
         ##: Control interface to Packetizer block
-        #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_mhz=196.608)
+        #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_hz=196.608)
         ##: Control interface to 40GbE interface block
         #self.eth         = eth.Eth(self._cfpga, 'eth')
         ##: Control interface to Correlation block
@@ -356,16 +356,16 @@ class SoukMkidReadout():
         for synth in [self.pfs_chanselect, self.pfs_offset_chanselect]:
             synth.initialize()
 
-    def set_tone(self, tone_id, freq_mhz, phase_offset_rads=0.0):
+    def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0):
         """
-        Configure both TX and RX paths for a tone at frequency ``freq_mhz``
+        Configure both TX and RX paths for a tone at frequency ``freq_hz``
         with ID ``tone_id``.
 
         :param tone_id: Index number of tone to set
         :type tone_id: int
 
-        :param freq_mhz: Tone frequency, in MHz
-        :type freq_mhz: float
+        :param freq_hz: Tone frequency, in Hz
+        :type freq_hz: float
 
         :param phase_offset_rads: Phase offset of tone, in radians.
         :type phase_offset_rads: float
@@ -375,28 +375,28 @@ class SoukMkidReadout():
 
         ### Configure receiving side
         # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
-        rx_bin_centers_mhz = np.fft.fftfreq(N_RX_FFT, 1./self.adc_clk_mhz)
-        rx_bin_centers_mhz += self.adc_clk_mhz/2. # account for upstream mixing
-        # Distance of freq_mhz from each bin center
-        rx_freq_bins_offset_mhz = freq_mhz - rx_bin_centers_mhz
+        rx_bin_centers_hz = np.fft.fftfreq(N_RX_FFT, 1./self.adc_clk_hz)
+        rx_bin_centers_hz += self.adc_clk_hz/2. # account for upstream mixing
+        # Distance of freq_hz from each bin center
+        rx_freq_bins_offset_hz = freq_hz - rx_bin_centers_hz
         # Index of nearest bin
-        rx_nearest_bin = np.argmin(np.abs(rx_freq_bins_offset_mhz))
+        rx_nearest_bin = np.argmin(np.abs(rx_freq_bins_offset_hz))
         # Put this bin in the correct tone slot
         self.chanselect.set_single_channel(tone_id, rx_nearest_bin)
         # Configure the mixer at this ID to the appropriate offset freq
-        rx_freq_offset_hz = rx_freq_bins_offset_mhz[rx_nearest_bin] * 1e6
+        rx_freq_offset_hz = rx_freq_bins_offset_hz[rx_nearest_bin] * 1e6
         self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
                                  phase_offset=phase_offset_rads,
-                                 sample_rate_mhz=self.adc_clk_mhz)
+                                 sample_rate_hz=self.adc_clk_hz)
         
         ### Configure transmit side
         # Select appropriate transmission FFT bin number (x2 because there are 2 banks)
-        tx_bin_centers_mhz = np.fft.fftfreq(2*N_TX_FFT, 1./self.adc_clk_mhz)
-        tx_bin_centers_mhz += self.adc_clk_mhz/2. # account for downstream mixing
+        tx_bin_centers_hz = np.fft.fftfreq(2*N_TX_FFT, 1./self.adc_clk_hz)
+        tx_bin_centers_hz += self.adc_clk_hz/2. # account for downstream mixing
         # Distance of desired tone from these centers
-        tx_freq_bins_offset_mhz = freq_mhz - tx_bin_centers_mhz
+        tx_freq_bins_offset_hz = freq_hz - tx_bin_centers_hz
         # Index of nearest bin
-        tx_nearest_bin = np.argmin(np.abs(tx_freq_bins_offset_mhz))
+        tx_nearest_bin = np.argmin(np.abs(tx_freq_bins_offset_hz))
         # Even numbered bins are associated with the non-offset synth.
         # Off bins are associated with the half-bin offset synth
         use_offset_bank = bool(tx_nearest_bin % 2)

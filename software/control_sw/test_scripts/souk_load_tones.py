@@ -9,11 +9,11 @@ import argparse
 import numpy as np
 from souk_mkid_readout import SoukMkidReadout
 
-def main(host, configfile, freqs_mhz, randomphase=False):
+def main(host, configfile, freqs_hz, randomphase=False):
     """
     Configure RFSoC 4x2 ``host`` with configuration
     described by ``configfile``. Then load the polyphase
-    synthesizer with tones at frequencies listed in ``freqs_mhz``.
+    synthesizer with tones at frequencies listed in ``freqs_hz``.
     If ``randomphase``, apply random phases to each tone.
     """
     print(f"Connecting to board {host}")
@@ -30,7 +30,7 @@ def main(host, configfile, freqs_mhz, randomphase=False):
     # r.input.enable_loopback()
 
     # Load tones
-    n_tones = len(freqs_mhz)
+    n_tones = len(freqs_hz)
     if randomphase:
         phases = np.random.uniform(-np.pi, np.pi, n_tones)
     else:
@@ -38,23 +38,23 @@ def main(host, configfile, freqs_mhz, randomphase=False):
     # If tones are too close together there is a risk that two
     # will end up in the same polphase synth bin, which the firmware
     # doesn't currently support.
-    min_tone_separation_mhz = r.adc_clk_mhz / r.pfs_chanselect.n_chans_out / 2
-    freqs_mhz = np.array(freqs_mhz)
+    min_tone_separation_hz = r.adc_clk_hz / r.pfs_chanselect.n_chans_out / 2
+    freqs_hz = np.array(freqs_hz)
     for i in range(n_tones):
-        f = freqs_mhz[i]
+        f = freqs_hz[i]
         p = phases[i]
-        print(f"Loading freq {f} MHz with phase {p} radians in slot {i}")
+        print(f"Loading freq {f} Hz with phase {p} radians in slot {i}")
         if f < 0:
-            print(f"Skipping frequency {f} MHz which is negative")
+            print(f"Skipping frequency {f} Hz which is negative")
             continue
-        if f > r.adc_clk_mhz:
-            print(f"Skipping frequency {f} MHz which is outside the first nyquist zone")
+        if f > r.adc_clk_hz:
+            print(f"Skipping frequency {f} Hz which is outside the first nyquist zone")
             continue
         # Figure out if there might be a problem with tones too close
-        offsets_mhz = np.abs(freqs_mhz - f)
-        closest_offset_mhz = min(offsets_mhz[offsets_mhz>0])
-        if closest_offset_mhz < min_tone_separation_mhz:
-            print(f"Warning: Frequency {f} MHz is only {closest_offset_mhz}<{min_tone_separation_mhz} from its neighbour")
+        offsets_hz = np.abs(freqs_hz - f)
+        closest_offset_hz = min(offsets_hz[offsets_hz>0])
+        if closest_offset_hz < min_tone_separation_hz:
+            print(f"Warning: Frequency {f} Hz is only {closest_offset_hz}<{min_tone_separation_hz} from its neighbour")
         r.set_tone(i, f, phase_offset_rads=p)
     # Set the Polyphase Synthesizer shift schedule. I.e., scale the
     # PSB FFT so that it cannot overflow, based on the number of input tones
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument("freqs", type=str, default='13.6,14.8',
-        help = "Comma-separated set of frequencies to output, in MHz"
+        help = "Comma-separated set of frequencies to output, in Hz"
     )
 
     parser.add_argument("--randomphase", action="store_true",

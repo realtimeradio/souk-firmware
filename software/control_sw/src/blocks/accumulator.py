@@ -128,7 +128,7 @@ class Accumulator(Block):
         return self._read_bram()
 
 
-    def plot_spectra(self, power=True, db=True, show=True, fftshift=True, sample_rate_mhz=None):
+    def plot_spectra(self, power=True, db=True, show=True, fftshift=True, sample_rate_hz=None):
         """
         Plot the spectra of all signals in a single signal_block,
         with accumulation length divided out
@@ -145,20 +145,20 @@ class Accumulator(Block):
         :param fftshift: If True, fftshift data before plotting.
         :type fftshift: bool
 
-        :param sample_rate_mhz: Effective FFT input sampling rate, in MHz.
+        :param sample_rate_hz: Effective FFT input sampling rate, in Hz.
             If provided, generate an appropriate frequency axis
-        :type sample_rate_mhz: float
+        :type sample_rate_hz: float
 
         :return: matplotlib.Figure
 
         """
         from matplotlib import pyplot as plt
         spec = self.get_new_spectra()
-        if sample_rate_mhz is None:
+        if sample_rate_hz is None:
             x = np.arange(self.n_chans)
             xlabel = 'Frequency Channel'
         else:
-            x = np.fft.fftfreq(self.n_chans, 1/sample_rate_mhz)
+            x = np.fft.fftfreq(self.n_chans, 1/sample_rate_hz) / 1e6
             xlabel = 'Frequency (MHz)'
         if fftshift:
             spec = np.fft.fftshift(spec)

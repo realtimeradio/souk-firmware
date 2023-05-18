@@ -74,7 +74,7 @@ class Generator(Block):
         imag = np.frombuffer(imagraw, dtype='>i2')
         return real + 1j*imag
 
-    def set_output_freq(self, n, freq_mhz, sample_rate_mhz=2457.6,
+    def set_output_freq(self, n, freq_hz, sample_rate_hz=2457600000,
                         amplitude=1., round_freq=True, window=False):
         """
         Set an output to a CW tone at a specific frequency.
@@ -82,17 +82,17 @@ class Generator(Block):
         :param n: Which generator to target. Use -1 to mean "all"
         :type n: int
 
-        :param freq_mhz: Output frequency, in MHz
-        :type freq_mhz: float
+        :param freq_hz: Output frequency, in Hz
+        :type freq_hz: float
 
-        :param sample_rate_mhz: DAC sample rate, in MHz
-        :type sample_rate_mhz: float
+        :param sample_rate_hz: DAC sample rate, in Hz
+        :type sample_rate_hz: float
 
         :param amplitude: Set the output of amplitude of the CW signal. Only
             applicable for LUT-based generators
         :type amplitude: float
 
-        :param round_freq: If True, round ``freq_mhz`` to the nearest frequency which
+        :param round_freq: If True, round ``freq_hz`` to the nearest frequency which
             can be represented with a ``self.n_samples`` circular buffer.
             This option affects only LUT generators.
         :type round_freq: bool
@@ -105,16 +105,16 @@ class Generator(Block):
            if self.n_generators is None:
                self._get_block_params()
            for i in range(self.n_generators):
-               self.set_output_freq(i, freq_mhz, sample_rate_mhz=sample_rate_mhz,
+               self.set_output_freq(i, freq_hz, sample_rate_hz=sample_rate_hz,
                                     amplitude=amplitude, round_freq=round_freq, window=window)
            return
         if self.n_samples > 1:
-            t = np.arange(self.n_samples) / sample_rate_mhz
+            t = np.arange(self.n_samples) / sample_rate_hz
             if round_freq:
-                freq_step_mhz = sample_rate_mhz / self.n_samples
-                freq_mhz = round(freq_mhz / freq_step_mhz) * freq_step_mhz
-                self._info(f"Rounded frequency to {freq_mhz} to make continuous circular waveform")
-            x = np.exp(1j*2*np.pi*freq_mhz*t) * amplitude
+                freq_step_hz = sample_rate_hz / self.n_samples
+                freq_hz = round(freq_hz / freq_step_hz) * freq_step_hz
+                self._info(f"Rounded frequency to {freq_hz} to make continuous circular waveform")
+            x = np.exp(1j*2*np.pi*freq_hz*t) * amplitude
             if window:
                 self._info("Appling Hann window")
                 x *= np.hanning(self.n_samples)
@@ -122,7 +122,7 @@ class Generator(Block):
         else:
             if amplitude != 1.0:
                 self._warning("Amplitude setting not used for CORDIC generators")
-            phase_step = 2*np.pi * freq_mhz / sample_rate_mhz
+            phase_step = 2*np.pi * freq_hz / sample_rate_hz
             self.set_cordic_output(n, phase_step)
 
     def set_cordic_output(self, n, p):

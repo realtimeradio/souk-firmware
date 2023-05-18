@@ -64,7 +64,7 @@ class Mixer(Block):
         """
         return bool(self.read_int('power_en'))
 
-    def set_chan_freq(self, chan, freq_offset_hz=None, phase_offset=0, sample_rate_mhz=2500):
+    def set_chan_freq(self, chan, freq_offset_hz=None, phase_offset=0, sample_rate_hz=2500000000):
         """
         Set the frequency of output channel `chan`.
 
@@ -79,16 +79,16 @@ class Mixer(Block):
             in units of radians.
         :type phase: float
 
-        :param sample_rate_mhz: DAC sample rate, in MHz
-        :type sample_rate_mhz: float
+        :param sample_rate_hz: DAC sample rate, in Hz
+        :type sample_rate_hz: float
 
         """
-        fft_period_s = self.n_chans / (sample_rate_mhz * 1e6) # seconds
+        fft_period_s = self.n_chans / sample_rate_hz
         fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
         phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
         self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset)
 
-    def add_freq(self, freq_hz, phase_offset=0, sample_rate_mhz=2500, scaling=1.0):
+    def add_freq(self, freq_hz, phase_offset=0, sample_rate_hz=2500, scaling=1.0):
         """
         Add a frequency to the output.
 
@@ -99,21 +99,21 @@ class Mixer(Block):
             in units of radians.
         :type phase: float
 
-        :param sample_rate_mhz: DAC sample rate, in MHz
-        :type sample_rate_mhz: float
+        :param sample_rate_hz: DAC sample rate, in Hz
+        :type sample_rate_hz: float
 
         :param scaling: optional scaling (<=1) to apply to the output tone amplitude.
         :type scaling: float
 
         """
-        fft_period_s = self.n_chans / (sample_rate_mhz * 1e6) # seconds
+        fft_period_s = self.n_chans / sample_rate_hz
         fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
         # Split target frequency into FFT bin number and offset
         chan = int(round(freq_hz / fft_rbw_hz))
         chan_offset_hz = freq_hz - (chan * fft_rbw_hz)
         self._info(f"Placing tone in channel {chan} with an offset of {chan_offset_hz} Hz")
         self.set_amplitude_scale(chan, scaling)
-        self.set_chan_freq(chan, freq_offset_hz=chan_offset_hz, phase_offset=phase_offset, sample_rate_mhz=sample_rate_mhz)
+        self.set_chan_freq(chan, freq_offset_hz=chan_offset_hz, phase_offset=phase_offset, sample_rate_hz=sample_rate_hz)
 
     def set_amplitude_scale(self, chan, scale=1.0):
         """
