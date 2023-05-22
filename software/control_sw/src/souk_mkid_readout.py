@@ -384,7 +384,7 @@ class SoukMkidReadout():
         # Put this bin in the correct tone slot
         self.chanselect.set_single_channel(tone_id, rx_nearest_bin)
         # Configure the mixer at this ID to the appropriate offset freq
-        rx_freq_offset_hz = rx_freq_bins_offset_hz[rx_nearest_bin] * 1e6
+        rx_freq_offset_hz = rx_freq_bins_offset_hz[rx_nearest_bin]
         self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
                                  phase_offset=phase_offset_rads,
                                  sample_rate_hz=self.adc_clk_hz)
