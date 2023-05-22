@@ -43,7 +43,6 @@ class Sync(Block):
     def uptime(self):
         """
         :return: Time in FPGA clock ticks since the FPGA was last programmed.
-            Resolution is 2**32 (21 seconds at 200 MHz)
 
         :rtype: int
         """

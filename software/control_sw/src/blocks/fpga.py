@@ -37,11 +37,11 @@ class Fpga(Block):
         """
         Estimate the FPGA clock, by polling the ``sys_clkcounter`` register.
         
-        :return: Estimated FPGA clock in MHz
+        :return: Estimated FPGA clock in Hz
         :rtype: float
 
         """
-        return self.host.estimate_fpga_clock()
+        return self.host.estimate_fpga_clock() * 1e6
 
     def get_firmware_version(self):
         """

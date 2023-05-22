@@ -2,7 +2,7 @@ hosts:
   - rfsoc4x2
 
 fpgfile: /home/jackh/src/souk-firmware/firmware/src/souk_single_pipeline_4x2/outputs/souk_single_pipeline_4x2_2023-05-06_1316.fpg
-adc_clk_mhz: 2457.6
+adc_clk_hz: 2457600000
 lmkfile: rfsoc4x2_PL_122M88_REF_245M76.txt
 lmxfile: rfsoc4x2_LMX_REF_245M76_OUT_491M52.txt
 

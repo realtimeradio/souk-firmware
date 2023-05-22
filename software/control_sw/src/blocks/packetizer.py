@@ -53,8 +53,8 @@ class Packetizer(Block):
     :param n_ants: Number of dual-polarization inputs streams in the system.
     :type n_ants: int
 
-    :param sample_rate_mhz: ADC sample rate in MHz. Used for data rate checks.
-    :type sample_rate_mhz: float
+    :param sample_rate_hz: ADC sample rate in Hz. Used for data rate checks.
+    :type sample_rate_hz: float
 
     :param sample_width: Sample width in bytes (e.g. 4+4 bit complex = 1)
     :type sample_width: int
@@ -71,20 +71,20 @@ class Packetizer(Block):
     :param granularity: The number of words per packetizer data block.
     :type granularity: int
     """
-    def __init__(self, host, name, n_chans=4096, n_ants=4, sample_rate_mhz=200.0,
+    def __init__(self, host, name, n_chans=4096, n_ants=4, sample_rate_hz=200000000,
             sample_width=1, word_width=64, line_rate_gbps=100., n_time_packet=16,
             granularity=32, logger=None):
         super(Packetizer, self).__init__(host, name, logger)
         NPOL = 2
         self.n_chans = n_chans
         self.n_ants = n_ants
-        self.sample_rate_mhz = sample_rate_mhz
+        self.sample_rate_hz = sample_rate_hz
         self.sample_width = sample_width
         self.word_width = word_width
         self.line_rate_gbps = line_rate_gbps
         self.n_total_words = NPOL * sample_width * n_chans * n_ants * n_time_packet // word_width
         self.n_words_per_chan = NPOL * self.sample_width * n_time_packet // self.word_width
-        self.full_data_rate_gbps = 8*self.sample_width * self.n_ants * self.sample_rate_mhz*1e6 / 1.0e9
+        self.full_data_rate_gbps = 8*self.sample_width * self.n_ants * self.sample_rate_hz / 1.0e9
         self.granularity = granularity
         self.n_slots = self.n_total_words // granularity
 
