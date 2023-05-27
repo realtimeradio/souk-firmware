@@ -364,7 +364,8 @@ class SoukMkidReadout():
         :param tone_id: Index number of tone to set
         :type tone_id: int
 
-        :param freq_hz: Tone frequency, in Hz
+        :param freq_hz: Tone frequency, in Hz. Or, use ``None`` to disable
+            this tone index.
         :type freq_hz: float
 
         :param phase_offset_rads: Phase offset of tone, in radians.
@@ -372,7 +373,14 @@ class SoukMkidReadout():
         """
 
         assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
-
+        # Disable anywhere either synthesizer is already using this tone ID
+        # TODO: is this the best behaviour?
+        for synth in [self.pfs_chanselect, self.pfs_offset_chanselect]:
+            chanmap = synth.get_channel_outmap()
+            for b in np.where(chanmap == tone_id)[0]:
+                synth.set_single_channel(b, -1)
+        if freq_hz is None:
+            return
         ### Configure receiving side
         # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
         rx_bin_centers_hz = np.fft.fftfreq(N_RX_FFT, 1./self.adc_clk_hz)
@@ -402,12 +410,6 @@ class SoukMkidReadout():
         use_offset_bank = bool(tx_nearest_bin % 2)
         # Splitting the bins between banks means the index within a bank is halved
         tx_nearest_bin = tx_nearest_bin // 2
-        # Disable anywhere either synthesizer is already using this tone ID
-        # TODO: is this the best behaviour?
-        for synth in [self.pfs_chanselect, self.pfs_offset_chanselect]:
-            chanmap = synth.get_channel_outmap()
-            for b in np.where(chanmap == tone_id)[0]:
-                synth.set_single_channel(b, -1)
         # Get index of nearest bin, and place tone in this bin for relevant
         # synth bank.
         if use_offset_bank:

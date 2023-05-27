@@ -203,7 +203,7 @@ class Mixer(Block):
         # Now phase offset
         phase_offset = self.read_int(offset_regname, word_offset=s)
         phase_offset = (phase_offset / (2**self._phase_offset_bp)) * np.pi
-        return phase_step, phase_offset, enable
+        return phase_step, phase_offset, enabled
         
 
     def initialize(self, read_only=False):

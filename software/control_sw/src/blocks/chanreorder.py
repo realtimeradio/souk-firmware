@@ -95,16 +95,16 @@ class ChanReorder(Block):
                 # Which input serial position contains this channel
                 in_spos = outchan // self._n_parallel_chans_in
             else:
-                in_pstream = 0 # Doesn't matter since the channel isn't real
-                in_spos = 0 # Doesn't matter since the channel isn't real
+                in_pstream = None
+                in_spos = None
             # Which output parallel stream would we like outchan to be in
             out_pstream = outn % self._n_parallel_chans_out
             # Which output serial position would we like outchan to be in
             out_spos = outn // self._n_parallel_chans_out
             # build maps appropriately
             self._debug(f'Chan {outchan} Setting input {in_pstream}:{in_spos} to {out_pstream}:{out_spos}')
-            serial_maps[in_pstream, out_spos] = in_spos
             if outchan != -1:
+                serial_maps[in_pstream, out_spos] = in_spos
                 parallel_maps[out_spos, out_pstream] = in_pstream
             else:
                 # Use special mux input which is tied to 0
