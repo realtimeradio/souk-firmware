@@ -396,6 +396,7 @@ class SoukMkidReadout():
         self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
                                  phase_offset=phase_offset_rads,
                                  sample_rate_hz=self.adc_clk_hz)
+        self.mixer.set_amplitude_scale(tone_id, 1.0)
         
         ### Configure transmit side
         # Select appropriate transmission FFT bin number (x2 because there are 2 banks)
