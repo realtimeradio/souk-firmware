@@ -48,8 +48,11 @@ class SoukMkidReadout():
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
 
+    :param local: If True, use local memory accesses rather than katcp. Only works as root!
+    :type local: bool
+
     """
-    def __init__(self, host, fpgfile=None, configfile=None, logger=None):
+    def __init__(self, host, fpgfile=None, configfile=None, logger=None, local=False):
         self.hostname = host #: hostname of FPGA board
         #: Python Logger instance
         self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(__name__ + ":%s" % (host)))
@@ -59,10 +62,15 @@ class SoukMkidReadout():
         self.configfile = configfile
         self.config = {}
         self.adc_clk_hz = None
+        #: CasperFpga transport class
+        if local:
+            transport = casperfpga.LocalMemTransport
+        else:
+            transport = casperfpga.KatcpTransport
         #: Underlying CasperFpga control instance
         self._cfpga = casperfpga.CasperFpga(
                         host=self.hostname,
-                        transport=casperfpga.KatcpTransport,
+                        transport=transport,
                     )
         # Try to read configuration files
         if configfile is not None:
