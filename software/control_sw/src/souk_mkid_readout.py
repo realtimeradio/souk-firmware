@@ -366,13 +366,14 @@ class SoukMkidReadout():
 
     def _get_closest_pfb_bin(self, freq_hz):
         """
-        Return the bin index of the closest PFB bin to a given tone frequency.
+        Return the bin index of the closest PFB bin to a given tone frequency,
+        and the offset from this bin center, in Hz.
 
         :param freq_hz: Tone frequency, in Hz
         :type freq_hz: float
 
-        :return: PFB bin index
-        :rtype: int
+        :return: PFB bin index, offset from this bin in Hz
+        :rtype: (int, float)
         """
         # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
         rx_bin_centers_hz = np.fft.fftfreq(N_RX_FFT, 1./self.adc_clk_hz)
@@ -381,7 +382,8 @@ class SoukMkidReadout():
         rx_freq_bins_offset_hz = freq_hz - rx_bin_centers_hz
         # Index of nearest bin
         rx_nearest_bin = np.argmin(np.abs(rx_freq_bins_offset_hz))
-        return rx_nearest_bin
+        rx_freq_offset_hz = rx_freq_bins_offset_hz[rx_nearest_bin]
+        return rx_nearest_bin, rx_freq_offset_hz
 
     def _get_closest_psb_bin(self, freq_hz):
         """
@@ -426,19 +428,20 @@ class SoukMkidReadout():
         if phase_offsets_rads is None:
             phase_offsets_rads = np.zeros(n_tones, dtype=float)
         if amplitudes is None:
-            amplitudes = np.zeros(n_tones, dtype=float)
+            amplitudes = np.ones(n_tones, dtype=float)
         assert len(freqs_hz) == n_tones
         assert len(phase_offsets_rads) == n_tones
         assert len(amplitudes) == n_tones
         chanmap_in = np.zeros(self.chanselect.n_chans_out, dtype=int)
         chanmap_psb = -1*np.ones(self.psb_chanselect.n_chans_out, dtype=int)
         chanmap_psb_offset = -1*np.ones(self.psb_offset_chanselect.n_chans_out, dtype=int)
+        lo_freqs_hz = np.zeros(n_tones, dtype=float)
         
         for fn, freq_hz in enumerate(freqs_hz):
             ### Configure receiving side
-            rx_nearest_bin = self._get_closest_pfb_bin(freq_hz)
+            rx_nearest_bin, rx_freq_offset_hz = self._get_closest_pfb_bin(freq_hz)
             chanmap_in[fn] = rx_nearest_bin
-            
+            lo_freqs_hz[fn] = rx_freq_offset_hz
             ### Configure transmit side
             tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
             # Even numbered bins are associated with the non-offset synth.
@@ -449,11 +452,11 @@ class SoukMkidReadout():
             if use_offset_bank:
                 chanmap_psb_offset[tx_nearest_bin] = fn
             else:
-                chanmap_psb_[tx_nearest_bin] = fn
+                chanmap_psb[tx_nearest_bin] = fn
         # Write input map
         self.chanselect.set_channel_outmap(chanmap_in)
         # Write mixer tones
-        self.mixer.set_freqs(freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz)
+        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz)
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
         self.psb_offset_chanselect.set_channel_outmap(chanmap_psb_offset)
@@ -507,30 +510,18 @@ class SoukMkidReadout():
         if freq_hz is None:
             return
         ### Configure receiving side
-        # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
-        rx_bin_centers_hz = np.fft.fftfreq(N_RX_FFT, 1./self.adc_clk_hz)
-        rx_bin_centers_hz += self.adc_clk_hz/2. # account for upstream mixing
-        # Distance of freq_hz from each bin center
-        rx_freq_bins_offset_hz = freq_hz - rx_bin_centers_hz
-        # Index of nearest bin
-        rx_nearest_bin = np.argmin(np.abs(rx_freq_bins_offset_hz))
+        rx_nearest_bin, rx_freq_offset_hz = self._get_closest_pfb_bin(freq_hz)
         # Put this bin in the correct tone slot
         self.chanselect.set_single_channel(tone_id, rx_nearest_bin)
         # Configure the mixer at this ID to the appropriate offset freq
-        rx_freq_offset_hz = rx_freq_bins_offset_hz[rx_nearest_bin]
         self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
                                  phase_offset=phase_offset_rads,
                                  sample_rate_hz=self.adc_clk_hz)
         self.mixer.set_amplitude_scale(tone_id, 1.0)
         
         ### Configure transmit side
-        # Select appropriate transmission FFT bin number (x2 because there are 2 banks)
-        tx_bin_centers_hz = np.fft.fftfreq(2*N_TX_FFT, 1./self.adc_clk_hz)
-        tx_bin_centers_hz += self.adc_clk_hz/2. # account for downstream mixing
-        # Distance of desired tone from these centers
-        tx_freq_bins_offset_hz = freq_hz - tx_bin_centers_hz
         # Index of nearest bin
-        tx_nearest_bin = np.argmin(np.abs(tx_freq_bins_offset_hz))
+        tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
         # Even numbered bins are associated with the non-offset synth.
         # Off bins are associated with the half-bin offset synth
         use_offset_bank = bool(tx_nearest_bin % 2)

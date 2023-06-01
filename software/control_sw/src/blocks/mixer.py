@@ -156,18 +156,19 @@ class Mixer(Block):
         n_tone = len(phase)
         assert len(phase_offset) == n_tone
         phase_int = np.zeros(len(phase), dtype='u4')
-        phase_offset_int = np.zeros(len(phase_offset), dtype='u4')
+        phase_offset_int = np.zeros(len(phase_offset), dtype='i4')
         for i in range(n_tone):
             phase_scaled = phase[i] / np.pi # units of pi rads
-            phase_scaled = ((phase_scaled + 2) % 2) # 0 to 2pi
+            phase_scaled = ((phase_scaled + 1) % 2) - 1 # -pi to pi
             phase_scaled = int(phase_scaled * 2**self._phase_bp)
-            assert phase_scaled >= 0
-            phase_int[i] = phase_scaled
-            phase_int += (1<<31) # enable bit
-            phase_offset_scaled = phase_offset[i] / np.pi
-            phase_offset_scaled = ((phase_offset_scaled + 2) % 2)
+            # set the MSB high
+            if phase_scaled >= 0:
+                phase_int[i] = (1<<31) + phase_scaled
+            else:
+                phase_int[i] = (1<<31) + (phase_scaled + (1<<31))
+            phase_offset_scaled = phase_offset[i] / np.pi # units of pi rads
+            phase_offset_scaled = ((phase_offset_scaled + 1) % 2) - 1 # -pi to pi
             phase_offset_scaled = int(phase_offset_scaled * 2**self._phase_offset_bp)
-            assert phase_offset_scaled >= 0
             phase_offset_int[i] = phase_offset_scaled
         if is_array:
             return phase_int, phase_offset_int
@@ -262,8 +263,11 @@ class Mixer(Block):
         fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
         phase_steps = freqs_hz / fft_rbw_hz * 2 * np.pi
         phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
+        scaling = self._format_amp_scale(scaling)
         # format appropriately
+        print(phase_steps)
         phase_steps = np.array(phase_steps, dtype='>u4')
+        print(phase_steps)
         phase_offsets = np.array(phase_offsets, dtype='>u4')
         scaling = np.array(scaling, dtype='>u4')
         for i in range(self._n_parallel_chans):
