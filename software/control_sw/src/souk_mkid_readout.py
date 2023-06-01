@@ -13,6 +13,7 @@ from .blocks import sync
 from .blocks import input
 #from .blocks import delay
 from .blocks import pfb
+from .blocks import zoom_pfb
 #from .blocks import mask
 from .blocks import autocorr
 #from .blocks import eq
@@ -222,9 +223,10 @@ class SoukMkidReadout():
                                 n_chans_in=N_RX_FFT,
                                 n_chans_out=N_TONE,
                                 n_parallel_chans_in=16,
+                                support_zeroing=True,
                             )
         #: Control interface to Zoom FFT
-        self.zoomfft      = pfb.Pfb(self._cfpga, 'zoom_fft',
+        self.zoomfft      = zoom_pfb.ZoomPfb(self._cfpga, 'zoom_fft',
                                fftshift=0xffffffff
                             )
         #: Control interface to Zoom FFT Power Accumulator
@@ -266,14 +268,14 @@ class SoukMkidReadout():
                                 n_chans_in=N_TONE,
                                 n_chans_out=N_TX_FFT,
                                 n_parallel_chans_in=8,
-                                support_zeroing=True
+                                support_zeroing=True,
                             )
         #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
         self.pfs_offset_chanselect = chanreorder.ChanReorder(self._cfpga, 'synth_offset_input_reorder',
                                 n_chans_in=N_TONE,
                                 n_chans_out=N_TX_FFT,
                                 n_parallel_chans_in=8,
-                                support_zeroing=True
+                                support_zeroing=True,
                             )
         #: Control interface to Polyphase Synthesizer block
         self.pfs           = pfb.Pfb(self._cfpga, 'psb', fftshift=0b111)
