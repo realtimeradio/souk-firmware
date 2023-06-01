@@ -112,8 +112,11 @@ class Generator(Block):
             t = np.arange(self.n_samples) / sample_rate_hz
             if round_freq:
                 freq_step_hz = sample_rate_hz / self.n_samples
-                freq_hz = round(freq_hz / freq_step_hz) * freq_step_hz
-                self._info(f"Rounded frequency to {freq_hz} to make continuous circular waveform")
+                freq_round_hz = round(freq_hz / freq_step_hz) * freq_step_hz
+                round_delta = freq_round_hz - freq_hz
+                if round_delta != 0:
+                    self._info(f"Rounded frequency from {freq_hz} to {freq_round_hz} to make continuous circular waveform (delta {round_delta})")
+                    freq_hz = freq_round_hz
             x = np.exp(1j*2*np.pi*freq_hz*t) * amplitude
             if window:
                 self._info("Appling Hann window")

@@ -71,10 +71,13 @@ class Accumulator(Block):
         """
         return self.read_uint('acc_cnt')
    
-    def _wait_for_acc(self):
+    def _wait_for_acc(self, poll_period_s=0.1):
         """
         Block until a new accumulation completes, then return
         the count index.
+
+        :param poll_period_s: The polling rate of the new accumulation counter, in seconds.
+        :type poll_period_s: float
 
         :return: Current accumulation count
         :rtype: int
@@ -85,7 +88,7 @@ class Accumulator(Block):
         if cnt1 < cnt0:
             cnt1 += 2**32
         while cnt1 < ((cnt0+1) % (2**32)):
-            time.sleep(0.1)
+            time.sleep(poll_period_s)
             cnt1 = self.get_acc_cnt()
         return cnt1
 
@@ -97,7 +100,7 @@ class Accumulator(Block):
             dimensions are [FREQUENCY CHANNEL].
         :rtype: numpy.array
         """
-        dout = np.zeros(self.n_chans, dtype=np.complex)
+        dout = np.zeros(self.n_chans, dtype=complex)
         start_acc_cnt = self.get_acc_cnt()
         wordsize = np.dtype(self._dtype).itemsize
         if self._is_complex:
@@ -105,12 +108,11 @@ class Accumulator(Block):
         for i in range(self._n_parallel_chans):
             ramname = f'dout{i}'
             d = np.frombuffer(self.read(ramname, self._n_serial_chans*wordsize), dtype=self._dtype)
-            for j in range(self._n_serial_chans):
-                if self._is_complex:
-                    dout.real[self._n_parallel_chans * j + i] = d[2*j]
-                    dout.imag[self._n_parallel_chans * j + i] = d[2*j + 1]
-                else:
-                    dout.real[self._n_parallel_chans * j + i] = d[j]
+            if self._is_complex:
+                dout[i::self._n_parallel_chans].real = d[0::2]
+                dout[i::self._n_parallel_chans].imag = d[1::2]
+            else:
+                dout[i::self._n_parallel_chans].imag = d[:]
         stop_acc_cnt = self.get_acc_cnt()
         if start_acc_cnt != stop_acc_cnt:
             self._warning('Accumulation counter changed while reading data!')

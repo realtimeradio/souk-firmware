@@ -36,7 +36,12 @@ class Rfdc(Block):
         self.lmxfile = lmxfile
 
     def _check_clockfile_exists(self, f):
-        available = self.core.show_clk_files()
+        try:
+            available = self.core.show_clk_files()
+        except AttributeError:
+            # Happens if the transport doesn't have a listbof method
+            # Return as if everything is fine
+            return True
         if not f in available:
             self._error(f"Clockfile {f} not in available files ({available})")
             return False
