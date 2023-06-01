@@ -24,7 +24,7 @@ def main(host, configfile, freqs_hz, randomphase=False):
     r.initialize()
 
     # Configure the output to be based on the polphase synth
-    r.output.use_pfs()
+    r.output.use_psb()
 
     ## Could internally loopback in order to use r.input.plot_adc*()
     # r.input.enable_loopback()
@@ -38,7 +38,7 @@ def main(host, configfile, freqs_hz, randomphase=False):
     # If tones are too close together there is a risk that two
     # will end up in the same polphase synth bin, which the firmware
     # doesn't currently support.
-    min_tone_separation_hz = r.adc_clk_hz / r.pfs_chanselect.n_chans_out / 2
+    min_tone_separation_hz = r.adc_clk_hz / r.psb_chanselect.n_chans_out / 2
     freqs_hz = np.array(freqs_hz)
     for i in range(n_tones):
         f = freqs_hz[i]
@@ -61,7 +61,7 @@ def main(host, configfile, freqs_hz, randomphase=False):
     shift_stages = int(np.ceil(np.log2(n_tones)))
     shift_schedule = 2**(shift_stages) - 1
     print(f"Setting output FFT schedule to {shift_schedule:x}")
-    for synth in [r.pfs, r.pfsoffset]:
+    for synth in [r.psb, r.psboffset]:
         synth.set_fftshift(shift_schedule)
     
     # Now the tones are loaded, reset all the phase accumulators

@@ -83,37 +83,37 @@ class Mixer(Block):
         :type sample_rate_hz: float
 
         """
-        fft_period_s = self.n_chans / sample_rate_hz
-        fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
-        phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
+        if freq_offset_hz is None:
+            phase_step = None
+        else:
+            fft_period_s = self.n_chans / sample_rate_hz
+            fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
+            phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
         self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset)
 
-    def add_freq(self, freq_hz, phase_offset=0, sample_rate_hz=2500, scaling=1.0):
+    def _format_amp_scale(self, v):
         """
-        Add a frequency to the output.
+        Given a desired scale factor, format as an appropriate
+        integer which is interpretable by the mixer firmware.
 
-        :param freq_hz: The frequency, in Hz, to emit.
-        :type freq_offset_hz: float
+        :param v: Scale factor (or numpy array of factors)
+        :type v: float or array of floats
 
-        :param phase_offset: The phase offset at which this oscillator should start
-            in units of radians.
-        :type phase: float
-
-        :param sample_rate_hz: DAC sample rate, in Hz
-        :type sample_rate_hz: float
-
-        :param scaling: optional scaling (<=1) to apply to the output tone amplitude.
-        :type scaling: float
-
+        :return: Integer scale[s]
+        :rtype: int or array of ints
         """
-        fft_period_s = self.n_chans / sample_rate_hz
-        fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
-        # Split target frequency into FFT bin number and offset
-        chan = int(round(freq_hz / fft_rbw_hz))
-        chan_offset_hz = freq_hz - (chan * fft_rbw_hz)
-        self._info(f"Placing tone in channel {chan} with an offset of {chan_offset_hz} Hz")
-        self.set_amplitude_scale(chan, scaling)
-        self.set_chan_freq(chan, freq_offset_hz=chan_offset_hz, phase_offset=phase_offset, sample_rate_hz=sample_rate_hz)
+        is_array = isinstance(v, np.ndarray)
+        if not is_array:
+            v = np.array([v], dtype=float)
+        v *= 2**self._n_scale_bits
+        v = np.array(np.round(v), dtype=int)
+        # saturate
+        scale_max = 2**self._n_scale_bits - 1
+        v[v > scale_max] = scale_max
+        if is_array:
+            return v
+        else:
+            return v[0]
 
     def set_amplitude_scale(self, chan, scale=1.0):
         """
@@ -128,15 +128,52 @@ class Mixer(Block):
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         regname = f'lo{p}_scale'
-        assert scale > 0
-        # convert to uint
-        scale *= 2**self._n_scale_bits
-        scale = round(scale)
-        # saturate
-        scale_max = 2**self._n_scale_bits - 1
-        if scale > scale_max:
-            scale = scale_max
+        assert scale >= 0
+        scale = self._format_amp_scale(scale)
         self.write_int(regname, scale, word_offset=s)
+
+    def _format_phase_step(self, phase, phase_offset):
+        """
+        Given a desired phase step and offset, format each as appropriate
+        integers which are interpretable by the mixer firmware
+
+        :param phase: phase[s] to step per clock cycle, in radians
+        :type phase: float, or array of floats
+
+        :param phase_offset: phase offset[s], in radians
+        :type phase_offset: float, or array of floats
+
+        :return: (phase_int, phase_offset_int) -- the integers to be written
+            to firmware. Each is either an integer (if ``phase`` and ``phase_offset``
+            are integers. Else an array of integers.
+        :rtype: int, int (or array(dtype=int), array(dtype=int))
+        """
+        is_array = isinstance(phase, np.ndarray)
+        assert isinstance(phase_offset, np.ndarray) == is_array
+        if not is_array:
+            phase = np.array([phase])
+            phase_offset = np.array([phase_offset])
+        n_tone = len(phase)
+        assert len(phase_offset) == n_tone
+        phase_int = np.zeros(len(phase), dtype='u4')
+        phase_offset_int = np.zeros(len(phase_offset), dtype='i4')
+        for i in range(n_tone):
+            phase_scaled = phase[i] / np.pi # units of pi rads
+            phase_scaled = ((phase_scaled + 1) % 2) - 1 # -pi to pi
+            phase_scaled = int(phase_scaled * 2**self._phase_bp)
+            # set the MSB high
+            if phase_scaled >= 0:
+                phase_int[i] = (1<<31) + phase_scaled
+            else:
+                phase_int[i] = (1<<31) + (phase_scaled + (1<<31))
+            phase_offset_scaled = phase_offset[i] / np.pi # units of pi rads
+            phase_offset_scaled = ((phase_offset_scaled + 1) % 2) - 1 # -pi to pi
+            phase_offset_scaled = int(phase_offset_scaled * 2**self._phase_offset_bp)
+            phase_offset_int[i] = phase_offset_scaled
+        if is_array:
+            return phase_int, phase_offset_int
+        else:
+            return phase_int[0], phase_offset_int[0]
 
     def set_phase_step(self, chan, phase=None, phase_offset=0.0):
         """
@@ -160,23 +197,11 @@ class Mixer(Block):
         inc_regname = f'lo{p}_phase_inc'
         offset_regname = f'lo{p}_phase_offset'
         if phase is None:
-            enable_bit = 0
             phase_scaled = 0
+            phase_offset_scaled = 0
         else:
-            enable_bit = 1
-            # phase written to register should be +/-1 and in units of pi
-            phase_scaled = phase / np.pi
-            phase_scaled = ((phase_scaled + 1) % 2) - 1
-            phase_scaled = int(phase_scaled * 2**self._phase_bp)
-        # Mask top bit for enable
-        if phase_scaled < 0:
-            phase_scaled_uint = phase_scaled + 2**(self._phase_bp + 1)
-        else:
-            phase_scaled_uint = phase_scaled
-        self.write_int(inc_regname, (enable_bit << 31) + phase_scaled_uint, word_offset=s)
-        phase_offset_scaled = phase_offset / np.pi
-        phase_offset_scaled = ((phase_offset_scaled + 1) % 2) - 1
-        phase_offset_scaled = int(phase_offset_scaled * 2**self._phase_offset_bp)
+            phase_scaled, phase_offset_scaled = self._format_phase_step(phase, phase_offset)
+        self.write_int(inc_regname, phase_scaled, word_offset=s)
         self.write_int(offset_regname, phase_offset_scaled, word_offset=s)
  
     def get_phase_offset(self, chan):
@@ -204,7 +229,52 @@ class Mixer(Block):
         phase_offset = self.read_int(offset_regname, word_offset=s)
         phase_offset = (phase_offset / (2**self._phase_offset_bp)) * np.pi
         return phase_step, phase_offset, enabled
+
+    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000):
+        """
+        Configure the amplitudes, phases, and frequencies of multiple tones.
+
+        :param freqs_hz: The frequencies, in Hz, to emit.
+        :type freqs_hz: numpy.ndarray
+
+        :param phase_offsets: The phase offsets at which oscillators should start,
+            in units of radians.
+        :type phase_offsets: np.ndarray
+
+        :param scaling: optional scaling (<=1) to apply to the output tone
+            amplitudes. If a single number, apply this scale to all tones.
+        :type scaling: np.ndarray
+
+        :param sample_rate_hz: DAC sample rate, in Hz
+        :type sample_rate_hz: float
+
+        """
+        freqs_hz = np.array(freqs_hz, dtype=float)
+        n_tone = len(freqs_hz)
+        phase_offsets = np.array(phase_offsets, dtype=float)
+        assert len(phase_offsets) == n_tone
+        try:
+            assert len(scaling) == n_tone
+            scaling = np.array(scaling)
+        except TypeError:
+            scaling = scaling * np.ones(n_tone, dtype=float)
         
+        fft_period_s = self.n_chans / sample_rate_hz
+        fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
+        phase_steps = freqs_hz / fft_rbw_hz * 2 * np.pi
+        phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
+        scaling = self._format_amp_scale(scaling)
+        # format appropriately
+        print(phase_steps)
+        phase_steps = np.array(phase_steps, dtype='>u4')
+        print(phase_steps)
+        phase_offsets = np.array(phase_offsets, dtype='>u4')
+        scaling = np.array(scaling, dtype='>u4')
+        for i in range(self._n_parallel_chans):
+            regprefix = f'lo{i}'
+            self.write(regprefix + '_scale', scaling[i::self._n_parallel_chans].tobytes())
+            self.write(regprefix + '_phase_inc', phase_steps[i::self._n_parallel_chans].tobytes())
+            self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
 
     def initialize(self, read_only=False):
         """
@@ -219,6 +289,4 @@ class Mixer(Block):
             pass
         else:
             self.disable_power_mode()
-            for i in range(self.n_chans):
-                self.set_phase_step(i, phase=None)
-                self.set_amplitude_scale(i, 1)
+            self.set_freqs(np.zeros(self.n_chans), np.zeros(self.n_chans), np.zeros(self.n_chans))
