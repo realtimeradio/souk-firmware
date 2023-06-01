@@ -262,23 +262,23 @@ class SoukMkidReadout():
         #: Control interface to LUT generators
         self.gen_lut       = generator.Generator(self._cfpga, 'lut_gen')
         #: Control interface to Pre-Polyphase Synthesizer Reorder
-        self.pfs_chanselect   = chanreorder.ChanReorder(self._cfpga, 'synth_input_reorder',
+        self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, 'synth_input_reorder',
                                 n_chans_in=N_TONE,
                                 n_chans_out=N_TX_FFT,
                                 n_parallel_chans_in=8,
                                 support_zeroing=True
                             )
         #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
-        self.pfs_offset_chanselect = chanreorder.ChanReorder(self._cfpga, 'synth_offset_input_reorder',
+        self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, 'synth_offset_input_reorder',
                                 n_chans_in=N_TONE,
                                 n_chans_out=N_TX_FFT,
                                 n_parallel_chans_in=8,
                                 support_zeroing=True
                             )
         #: Control interface to Polyphase Synthesizer block
-        self.pfs           = pfb.Pfb(self._cfpga, 'psb', fftshift=0b111)
+        self.psb           = pfb.Pfb(self._cfpga, 'psb', fftshift=0b111)
         #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
-        self.pfsoffset     = pfb.Pfb(self._cfpga, 'psboffset', fftshift=0b111)
+        self.psboffset     = pfb.Pfb(self._cfpga, 'psboffset', fftshift=0b111)
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, 'output')
         ##: Control interface to Packetizer block
@@ -309,10 +309,10 @@ class SoukMkidReadout():
             'zoomfft'    : self.zoomfft,
             'zoomacc'    : self.zoomacc,
 						'mixer'      : self.mixer,
-            'pfs_chanselect' : self.pfs_chanselect,
-            'pfs_offset_chanselect' : self.pfs_offset_chanselect,
-            'pfs'        : self.pfs,
-            'pfsoffset'  : self.pfsoffset,
+            'psb_chanselect' : self.psb_chanselect,
+            'psb_offset_chanselect' : self.psb_offset_chanselect,
+            'psb'        : self.psb,
+            'psboffset'  : self.psboffset,
             #'packetizer': self.packetizer,
             #'eth'       : self.eth,
             'autocorr'     : self.autocorr,
@@ -349,12 +349,129 @@ class SoukMkidReadout():
             self.sync.arm_sync()
             self.sync.sw_sync()
 
-    def reset_pfs_outputs(self):
+    def reset_psb_outputs(self):
         """
         Zero out all synthesis bank outputs.
         """
-        for synth in [self.pfs_chanselect, self.pfs_offset_chanselect]:
+        for synth in [self.psb_chanselect, self.psb_offset_chanselect]:
             synth.initialize()
+
+    def _get_closest_pfb_bin(self, freq_hz):
+        """
+        Return the bin index of the closest PFB bin to a given tone frequency.
+
+        :param freq_hz: Tone frequency, in Hz
+        :type freq_hz: float
+
+        :return: PFB bin index
+        :rtype: int
+        """
+        # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
+        rx_bin_centers_hz = np.fft.fftfreq(N_RX_FFT, 1./self.adc_clk_hz)
+        rx_bin_centers_hz += self.adc_clk_hz/2. # account for upstream mixing
+        # Distance of freq_hz from each bin center
+        rx_freq_bins_offset_hz = freq_hz - rx_bin_centers_hz
+        # Index of nearest bin
+        rx_nearest_bin = np.argmin(np.abs(rx_freq_bins_offset_hz))
+        return rx_nearest_bin
+
+    def _get_closest_psb_bin(self, freq_hz):
+        """
+        Return the bin index of the closest Polyphase Synthesis bin
+        to a given tone frequency.
+
+        :param freq_hz: Tone frequency, in Hz
+        :type freq_hz: float
+
+        :return: PSB bin index
+        :rtype: int
+        """
+        # Select appropriate transmission FFT bin number (x2 because there are 2 banks)
+        tx_bin_centers_hz = np.fft.fftfreq(2*N_TX_FFT, 1./self.adc_clk_hz)
+        tx_bin_centers_hz += self.adc_clk_hz/2. # account for downstream mixing
+        # Distance of desired tone from these centers
+        tx_freq_bins_offset_hz = freq_hz - tx_bin_centers_hz
+        # Index of nearest bin
+        tx_nearest_bin = np.argmin(np.abs(tx_freq_bins_offset_hz))
+        return tx_nearest_bin
+
+    def set_multi_tone(self, freqs_hz, phase_offsets_rads=None, amplitudes=None):
+        """
+        Configure both TX and RX paths for ``i`` tones at frequencies ``freqs_hz[i]``.
+        Disables all tones except those provided.
+
+        :param freqs_hz: Tone frequencies, in Hz.
+        :type freqs_hz: list of float
+
+        :param phase_offsets_rads: Phase offset of tones, in radians. If none is
+            provided, offsets of 0 are used.
+        :type phase_offsets_rads: list of float
+
+        :param amplitudes: Relative amplitude of tones, provided as a list
+            of floats between 0 and 1. If none is provided, amplitudes of 1.0
+            are used.
+        :type amplitudes: list of float
+        """
+
+        # Start with maps with everything disabled
+        n_tones = len(freqs_hz)
+        if phase_offsets_rads is None:
+            phase_offsets_rads = np.zeros(n_tones, dtype=float)
+        if amplitudes is None:
+            amplitudes = np.zeros(n_tones, dtype=float)
+        assert len(freqs_hz) == n_tones
+        assert len(phase_offsets_rads) == n_tones
+        assert len(amplitudes) == n_tones
+        chanmap_in = np.zeros(self.chanselect.n_chans_out, dtype=int)
+        chanmap_psb = -1*np.ones(self.psb_chanselect.n_chans_out, dtype=int)
+        chanmap_psb_offset = -1*np.ones(self.psb_offset_chanselect.n_chans_out, dtype=int)
+        
+        for fn, freq_hz in enumerate(freqs_hz):
+            ### Configure receiving side
+            rx_nearest_bin = self._get_closest_pfb_bin(freq_hz)
+            chanmap_in[fn] = rx_nearest_bin
+            
+            ### Configure transmit side
+            tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
+            # Even numbered bins are associated with the non-offset synth.
+            # Off bins are associated with the half-bin offset synth
+            use_offset_bank = bool(tx_nearest_bin % 2)
+            # Splitting the bins between banks means the index within a bank is halved
+            tx_nearest_bin = tx_nearest_bin // 2
+            if use_offset_bank:
+                chanmap_psb_offset[tx_nearest_bin] = fn
+            else:
+                chanmap_psb_[tx_nearest_bin] = fn
+        # Write input map
+        self.chanselect.set_channel_outmap(chanmap_in)
+        # Write mixer tones
+        self.mixer.set_freqs(freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz)
+        # Write output maps
+        self.psb_chanselect.set_channel_outmap(chanmap_psb)
+        self.psb_offset_chanselect.set_channel_outmap(chanmap_psb_offset)
+
+    def set_output_psb_scale(self, nshift, check_overflow=True):
+        """
+        Set the PSB to scale down by 2^nshift in amplitude.
+
+        :param nshift: Number of shift down stages in the PSB FFTs
+        :type nshift: int
+
+        :param check_overflow: If True, warn about PSB overflow before returning.
+        :type check_overflow: bool
+        """
+        shift = 2**nshift - 1
+        for psb in [self.psb, self.psb_offset]:
+            psb.set_fftshift(shift)
+        if not check_overflow:
+            return
+        psb_of = psb.get_overflow_count()
+        psboffset_of = psboffset.get_overflow_count()
+        time.sleep(1)
+        if not psb.get_overflow_count == psb_of:
+            self.logger.warning('PSB appears to be overflowing. Check psb.get_status() for more info')
+        if not psboffset.get_overflow_count == psb_of:
+            self.logger.warning('Offset PSB appears to be overflowing. Check psboffset.get_status() for more info')
 
     def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0):
         """
@@ -375,7 +492,7 @@ class SoukMkidReadout():
         assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
         # Disable anywhere either synthesizer is already using this tone ID
         # TODO: is this the best behaviour?
-        for synth in [self.pfs_chanselect, self.pfs_offset_chanselect]:
+        for synth in [self.psb_chanselect, self.psb_offset_chanselect]:
             chanmap = synth.get_channel_outmap()
             for b in np.where(chanmap == tone_id)[0]:
                 synth.set_single_channel(b, -1)
@@ -415,8 +532,8 @@ class SoukMkidReadout():
         # synth bank.
         if use_offset_bank:
             self.logger.info("Using offset filter bank")
-            synth_reorder = self.pfs_offset_chanselect
+            synth_reorder = self.psb_offset_chanselect
         else:
             self.logger.info("Using centered filter bank")
-            synth_reorder = self.pfs_chanselect
+            synth_reorder = self.psb_chanselect
         synth_reorder.set_single_channel(tx_nearest_bin, tone_id)

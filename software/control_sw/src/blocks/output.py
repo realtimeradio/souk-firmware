@@ -6,8 +6,8 @@ from souk_mkid_readout.error_levels import *
 class Output(Block):
     USE_CORDIC=0
     USE_LUT=1
-    USE_PFS=2
-    MODE_MAP = {USE_CORDIC:'CORDIC', USE_LUT:'LUT', USE_PFS:'PFS'}
+    USE_PSB=2
+    MODE_MAP = {USE_CORDIC:'CORDIC', USE_LUT:'LUT', USE_PSB:'PSB'}
     def __init__(self, host, name, logger=None):
         """
         :param host: CasperFpga interface for host.
@@ -34,11 +34,11 @@ class Output(Block):
         """
         self.write_int('sel', self.USE_LUT)
 
-    def use_pfs(self):
+    def use_psb(self):
         """
         Set output pipeline to use Polyphase Synthesis generators
         """
-        self.write_int('sel', self.USE_PFS)
+        self.write_int('sel', self.USE_PSB)
 
     def get_mode(self):
         """
@@ -61,7 +61,7 @@ class Output(Block):
 
         Status keys:
 
-            - mode (str) : 'CORDIC' or 'LUT' or 'PFS'
+            - mode (str) : 'CORDIC' or 'LUT' or 'PSB'
 
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
             status key-value pairs. flags_dict is
