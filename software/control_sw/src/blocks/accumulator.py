@@ -97,7 +97,7 @@ class Accumulator(Block):
             dimensions are [FREQUENCY CHANNEL].
         :rtype: numpy.array
         """
-        dout = np.zeros(self.n_chans, dtype=np.complex)
+        dout = np.zeros(self.n_chans, dtype=complex)
         start_acc_cnt = self.get_acc_cnt()
         wordsize = np.dtype(self._dtype).itemsize
         if self._is_complex:
