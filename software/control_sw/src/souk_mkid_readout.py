@@ -300,7 +300,7 @@ class SoukMkidReadout():
         #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
         self.psboffset     = pfb.Pfb(self._cfpga, f'{prefix}psboffset', fftshift=0b111)
         #: Control interface to Output Multiplex block
-        self.output        = output.Output(self._cfpga, f{prefix}'output')
+        self.output        = output.Output(self._cfpga, f'{prefix}output')
         ##: Control interface to Packetizer block
         #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_hz=196.608)
         ##: Control interface to 40GbE interface block
