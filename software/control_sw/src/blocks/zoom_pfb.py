@@ -15,7 +15,7 @@ class ZoomPfb(Pfb):
         :param fftshift: Default FFT shift to apply
         :type fftshift: int
         """
-        super(ZoomPfb, self).__init__(host, name, logger=logger, ffrshift=fftshift)
+        super(ZoomPfb, self).__init__(host, name, logger=logger, fftshift=fftshift)
 
     def set_channel(self, chan):
         """

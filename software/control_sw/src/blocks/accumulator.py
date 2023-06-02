@@ -46,12 +46,13 @@ class Accumulator(Block):
 
     """
     def __init__(self, host, name,
-                 acc_len=2**15,
                  logger=None,
+                 acc_len=2**15,
                  n_chans=4096,
                  n_parallel_chans=8,
                  is_complex=True,
-                 dtype='>i4'
+                 dtype='>i4',
+                 has_dest_ip=False,
                 ):
         super(Accumulator, self).__init__(host, name, logger)
         self.n_chans = n_chans
@@ -61,6 +62,7 @@ class Accumulator(Block):
         self._n_serial_chans = n_chans // n_parallel_chans
         self._dtype = dtype
         self._is_complex = is_complex
+        self._has_dest_ip = has_dest_ip
 
     def get_acc_cnt(self):
         """
@@ -202,7 +204,7 @@ class Accumulator(Block):
         :return: Current accumulation length
         :rtype: int
         """
-        return self.read_int('acc_len') * self._n_parallel_chans / self.n_chans
+        return self.read_int('acc_len') // self._n_serial_chans
 
     def set_acc_len(self, acc_len):
         """
@@ -211,8 +213,32 @@ class Accumulator(Block):
         :param acc_len: Number of spectra to accumulate
         :type acc_len: int
         """
-        acc_len = acc_len * self.n_chans // self._n_parallel_chans
+        acc_len = acc_len * self._n_serial_chans
         self.write_int('acc_len', acc_len)
+
+    def read_tt(self):
+        msb = self.read_uint('acc_tt_msb')
+        lsb = self.read_uint('acc_tt_lsb')
+        return (msb << 32) + lsb
+
+    def set_dest_ip(self, ip):
+        if not self._has_dest_ip:
+            raise NotImplementedError
+        ip_octs = list(map(int, ip.split('.')))
+        ip_int = 0
+        for i in range(4):
+            ip_int += (ip_octs[i] << (24 - 8*i))
+        self.write_int('dest_ip', ip_int)
+
+    def get_dest_ip(self):
+        if not self._has_dest_ip:
+            raise NotImplementedError
+        ip_int = self.read_uint('dest_ip')
+        ip_octs = [0 for _ in range(4)]
+        for i in range(4):
+            ip_octs[i] = (ip_int >> (24 - 8*i)) & 0xff
+        ip = '.'.join(map(str, ip_octs))
+        return ip
 
     def get_status(self):
         """
@@ -228,10 +254,11 @@ class Accumulator(Block):
             held in this dictionary are as defined in `error_levels.py` and indicate
             that values in the status dictionary are outside normal ranges.
         """
-        stats = {
-            'acc_len': self.get_acc_len(),
-        }
+        stats = {}
         flags = {}
+        stats['acc_len'] = self.get_acc_len()
+        if self._has_dest_ip:
+            stats['dest_ip'] = self.get_dest_ip()
         return stats, flags
 
     def initialize(self, read_only=False):
@@ -247,3 +274,138 @@ class Accumulator(Block):
             self.get_acc_len()
         else:
             self.set_acc_len(self._default_acc_len)
+            if self._has_dest_ip:
+                self.set_dest_ip('0.0.0.0')
+
+
+class WindowedAccumulator(Accumulator):
+    """
+    Instantiate a control interface for an Auto-Correlation block. This
+    provides auto-correlation spectra of post-FFT data.
+
+    In order to save FPGA resourece, the auto-correlation block may use a single
+    correlation core to compute the auto-correlation of a subset of the total
+    number of ADC channels at any given time. This is the case when the
+    block is instantiated with ``n_cores > 1`` and ``use_mux=True``.
+    In this case, auto-correlation spectra are captured ``n_signals / n_cores``
+    channels at a time. 
+
+    :param host: CasperFpga interface for host.
+    :type host: casperfpga.CasperFpga
+
+    :param name: Name of block in Simulink hierarchy.
+    :type name: str
+
+    :param logger: Logger instance to which log messages should be emitted.
+    :type logger: logging.Logger
+
+    :param acc_len: Accumulation length initialization value, in spectra.
+    :type acc_len: int
+
+    :param n_chans: Number of frequency channels.
+    :type n_chans: int
+
+    :param n_parallel_chans: Number of chans processed by the firmware
+        module in parallel.
+    :type n_parallel_chans: int
+
+    :param is_complex: If True, block accumulates complex-valued data.
+    :type is_complex: Bool
+
+    :param dtype: Data type string (as recognised by numpy's `frombuffer` method)
+        for accumulated data. If data are complex, this is the data type of
+        one of a single real/imag component.
+    :type dtype: str
+
+    """
+    def __init__(self, host, name,
+                 logger=None,
+                 acc_len=2**15,
+                 n_chans=4096,
+                 n_parallel_chans=8,
+                 is_complex=True,
+                 dtype='>i4',
+                 has_dest_ip=False,
+                 include_window=False,
+                 window_bp=14,
+                 window_dtype='>i2',
+                 window_n_points=2**11,
+                 max_reuse_bits=9
+                ):
+        super(WindowedAccumulator, self).__init__(host, name, logger,
+                acc_len=acc_len, n_chans=n_chans,
+                n_parallel_chans=n_parallel_chans, is_complex=is_complex,
+                dtype=dtype, has_dest_ip=has_dest_ip)
+        self._window_bp = window_bp
+        self._window_dtype = window_dtype
+        self._window_n_points = window_n_points
+        self._max_reuse_bits = max_reuse_bits
+
+    def write_window(self, window):
+        assert len(window) <= self._window_n_points
+        coeffs = np.array(window)
+        coeffs *= 2**self._window_bp
+        coeffs = np.array(coeffs, dtype=self._window_dtype)
+        self.write('window', coeffs.tobytes())
+
+    def get_window(self, n=None):
+        nbytes = self._window_n_points * np.dtype(self._window_dtype).itemsize
+        fullwind = np.frombuffer(self.read('window', nbytes), dtype=self._window_dtype)
+        if n is None:
+            n = int(np.ceil(self.get_acc_len() / 2**self.get_window_step()))
+        out = fullwind[0:n] / 2**self._window_bp
+        return out
+
+    def set_window_step(self, n):
+        assert n <= self._max_reuse_bits
+        self.write_int('window_shift', n)
+
+    def get_window_step(self):
+        return self.read_uint('window_shift')
+
+    def set_window(self, windfunc=np.ones):
+        # Start with known state, to aid in future debugging
+        coeffs = (np.zeros(self._window_n_points))
+        acc_len = self.get_acc_len()
+        # Need to reuse coeffs if acc_len is longer than number of window points
+        f = acc_len / self._window_n_points
+        reuse_factor_bits = max(0, int(np.ceil(np.log2(f))))
+        reuse_factor = 2**reuse_factor_bits
+        self.set_window_step(reuse_factor_bits)
+        n_coeffs = int(np.ceil(acc_len / reuse_factor))
+        self.logger.info(f'Acclen {acc_len}; using {n_coeffs} points, with reuse factor {reuse_factor}')
+        coeffs[0:n_coeffs] = windfunc(n_coeffs)
+        self.write_window(coeffs)
+
+    def get_status(self):
+        """
+        Get status and error flag dictionaries.
+
+        Status keys:
+
+            - acc_len (int) : Currently loaded accumulation length in number of spectra.
+
+        :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
+            status key-value pairs. flags_dict is
+            a dictionary with all, or a sub-set, of the keys in `status_dict`. The values
+            held in this dictionary are as defined in `error_levels.py` and indicate
+            that values in the status dictionary are outside normal ranges.
+        """
+        stats, flags = super(WindowedAccumulator, self).get_status()
+        stats['window_step'] = 2**self.get_window_step()
+        stats['window'] = self.get_window()
+        return stats, flags
+
+    def initialize(self, read_only=False):
+        """
+        Initialize the block, setting (or reading) the accumulation length.
+
+        :param read_only: If False, set the accumulation length to the value provided
+            when this block was instantiated, and set the window function to all ones.
+            If True, do nothing.
+        :type read_only: bool
+        """
+        super(WindowedAccumulator, self).initialize(read_only=read_only)
+        if not read_only:
+            self.set_window_step(0)
+            self.write_window(np.ones(self._window_n_points))

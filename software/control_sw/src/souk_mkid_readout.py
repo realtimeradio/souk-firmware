@@ -243,6 +243,7 @@ class SoukMkidReadout():
                                     n_parallel_chans=1,
                                     dtype='>u8',
                                     is_complex=False,
+                                    has_dest_ip=False,
                             )
         #: Control interface to Mixer block
         self.mixer        = mixer.Mixer(self._cfpga, 'mix',
@@ -253,18 +254,22 @@ class SoukMkidReadout():
                             )
         #: Control interface to Accumulator Blocks
         self.accumulators   =  []
-        self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc0',
+        self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, 'acc0',
                                     n_chans=N_TONE,
                                     n_parallel_chans=8,
                                     dtype='>i4',
                                     is_complex=True,
+                                    has_dest_ip=True,
+                                    window_n_points=2**11,
                                 )
                                ]
-        self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc1',
+        self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, 'acc1',
                                     n_chans=N_TONE,
                                     n_parallel_chans=8,
                                     dtype='>i4',
                                     is_complex=True,
+                                    has_dest_ip=True,
+                                    window_n_points=2**11,
                                 )
                                ]
         #: Control interface to CORDIC generators

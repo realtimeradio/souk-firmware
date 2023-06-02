@@ -265,9 +265,7 @@ class Mixer(Block):
         phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
         scaling = self._format_amp_scale(scaling)
         # format appropriately
-        print(phase_steps)
         phase_steps = np.array(phase_steps, dtype='>u4')
-        print(phase_steps)
         phase_offsets = np.array(phase_offsets, dtype='>u4')
         scaling = np.array(scaling, dtype='>u4')
         for i in range(self._n_parallel_chans):
