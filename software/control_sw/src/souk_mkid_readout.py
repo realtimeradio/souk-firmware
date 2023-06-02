@@ -13,6 +13,7 @@ from .blocks import sync
 from .blocks import input
 #from .blocks import delay
 from .blocks import pfb
+from .blocks import zoom_pfb
 #from .blocks import mask
 from .blocks import autocorr
 #from .blocks import eq
@@ -48,20 +49,24 @@ class SoukMkidReadout():
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
 
+    :param pipeline_id: Pipeline number within a single RFSoC board.
+    :type pipeline_id: int
+
     :param local: If True, use local memory accesses rather than katcp. Only works as root!
     :type local: bool
 
     """
-    def __init__(self, host, fpgfile=None, configfile=None, logger=None, local=False):
+    def __init__(self, host, fpgfile=None, configfile=None, logger=None, pipeline_id=0, local=False):
         self.hostname = host #: hostname of FPGA board
         #: Python Logger instance
-        self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(__name__ + ":%s" % (host)))
+        self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(f'{__name__}:{host}:{pipeline_id}'))
         #: fpgfile currently in use
         self.fpgfile = fpgfile
         #: configuration YAML file
         self.configfile = configfile
         self.config = {}
         self.adc_clk_hz = None
+        self.pipeline_id = pipeline_id
         #: CasperFpga transport class
         if local:
             transport = casperfpga.LocalMemTransport
@@ -185,6 +190,7 @@ class SoukMkidReadout():
         Initialize firmware blocks, populating the ``blocks`` attribute.
         """
         # blocks
+        prefix = f'p{self.pipeline_id}_'
         #: Control interface to high-level FPGA functionality
         self.fpga        = fpga.Fpga(self._cfpga, "")
         #: Control interface to RFDC block
@@ -193,21 +199,21 @@ class SoukMkidReadout():
                                lmxfile=self.config.get('lmxfile', None),
                            )
         #: Control interface to Synchronization / Timing block
-        self.sync        = sync.Sync(self._cfpga, 'sync')
+        self.sync        = sync.Sync(self._cfpga, f'{prefix}sync')
         ##: Control interface to Noise Generation block
         #self.noise       = noisegen.NoiseGen(self._cfpga, 'noise', n_noise=2, n_outputs=64)
         #: Control interface to Input Multiplex block
-        self.input       = input.Input(self._cfpga, 'input')
+        self.input       = input.Input(self._cfpga, f'{prefix}input')
         ##: Control interface to Coarse Delay block
         #self.delay       = delay.Delay(self._cfpga, 'delay', n_streams=64)
         #: Control interface to PFB block
-        self.pfb         = pfb.Pfb(self._cfpga, 'pfb',
+        self.pfb         = pfb.Pfb(self._cfpga, f'{prefix}pfb',
                                fftshift=self.config.get('fftshift', 0xffffffff),
                            )
         ##: Control interface to Mask (flagging) block
         #self.mask        = mask.Mask(self._cfpga, 'mask')
         #: Control interface to Autocorrelation block
-        self.autocorr    = autocorr.AutoCorr(self._cfpga, 'autocorr',
+        self.autocorr    = autocorr.AutoCorr(self._cfpga, f'{prefix}autocorr',
                                n_chans=N_RX_FFT,
                                n_signals=1,
                                n_parallel_streams=16,
@@ -217,7 +223,7 @@ class SoukMkidReadout():
         ##: Control interface to Equalization block
         #self.eq          = eq.Eq(self._cfpga, 'eq', n_streams=64, n_coeffs=2**9)
         #: Control interface to post-PFB Test Vector Generator block
-        self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, 'pfbtvg',
+        self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, f'{prefix}pfbtvg',
                                 n_inputs=1,
                                 n_chans=N_RX_FFT,
                                 n_serial_inputs=1,
@@ -226,24 +232,26 @@ class SoukMkidReadout():
                                 sample_format='h',
                             )
         #: Control interface to Channel Reorder block
-        self.chanselect   = chanreorder.ChanReorder(self._cfpga, 'chan_select',
+        self.chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}chan_select',
                                 n_chans_in=N_RX_FFT,
                                 n_chans_out=N_TONE,
                                 n_parallel_chans_in=16,
+                                support_zeroing=True,
                             )
         #: Control interface to Zoom FFT
-        self.zoomfft      = pfb.Pfb(self._cfpga, 'zoom_fft',
+        self.zoomfft      = zoom_pfb.ZoomPfb(self._cfpga, f'{prefix}zoom_fft',
                                fftshift=0xffffffff
                             )
         #: Control interface to Zoom FFT Power Accumulator
-        self.zoomacc      = accumulator.Accumulator(self._cfpga, 'zoom_acc',
+        self.zoomacc      = accumulator.Accumulator(self._cfpga, f'{prefix}zoom_acc',
                                     n_chans=1024,
                                     n_parallel_chans=1,
                                     dtype='>u8',
                                     is_complex=False,
+                                    has_dest_ip=False,
                             )
         #: Control interface to Mixer block
-        self.mixer        = mixer.Mixer(self._cfpga, 'mix',
+        self.mixer        = mixer.Mixer(self._cfpga, f'{prefix}mix',
                                 n_chans=N_TONE,
                                 n_parallel_chans=8,
                                 phase_bp=30,
@@ -251,44 +259,48 @@ class SoukMkidReadout():
                             )
         #: Control interface to Accumulator Blocks
         self.accumulators   =  []
-        self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc0',
+        self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc0',
                                     n_chans=N_TONE,
                                     n_parallel_chans=8,
                                     dtype='>i4',
                                     is_complex=True,
+                                    has_dest_ip=True,
+                                    window_n_points=2**11,
                                 )
                                ]
-        self.accumulators   += [accumulator.Accumulator(self._cfpga, 'acc1',
+        self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc1',
                                     n_chans=N_TONE,
                                     n_parallel_chans=8,
                                     dtype='>i4',
                                     is_complex=True,
+                                    has_dest_ip=True,
+                                    window_n_points=2**11,
                                 )
                                ]
         #: Control interface to CORDIC generators
-        self.gen_cordic    = generator.Generator(self._cfpga, 'cordic_gen')
+        self.gen_cordic    = generator.Generator(self._cfpga, f'{prefix}cordic_gen')
         #: Control interface to LUT generators
-        self.gen_lut       = generator.Generator(self._cfpga, 'lut_gen')
+        self.gen_lut       = generator.Generator(self._cfpga, f'{prefix}lut_gen')
         #: Control interface to Pre-Polyphase Synthesizer Reorder
-        self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, 'synth_input_reorder',
+        self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_input_reorder',
                                 n_chans_in=N_TONE,
                                 n_chans_out=N_TX_FFT,
                                 n_parallel_chans_in=8,
-                                support_zeroing=True
+                                support_zeroing=True,
                             )
         #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
-        self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, 'synth_offset_input_reorder',
+        self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_offset_input_reorder',
                                 n_chans_in=N_TONE,
                                 n_chans_out=N_TX_FFT,
                                 n_parallel_chans_in=8,
-                                support_zeroing=True
+                                support_zeroing=True,
                             )
         #: Control interface to Polyphase Synthesizer block
-        self.psb           = pfb.Pfb(self._cfpga, 'psb', fftshift=0b111)
+        self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
         #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
-        self.psboffset     = pfb.Pfb(self._cfpga, 'psboffset', fftshift=0b111)
+        self.psboffset     = pfb.Pfb(self._cfpga, f'{prefix}psboffset', fftshift=0b111)
         #: Control interface to Output Multiplex block
-        self.output        = output.Output(self._cfpga, 'output')
+        self.output        = output.Output(self._cfpga, f'{prefix}output')
         ##: Control interface to Packetizer block
         #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_hz=196.608)
         ##: Control interface to 40GbE interface block
@@ -306,17 +318,13 @@ class SoukMkidReadout():
             'fpga'      : self.fpga,
             'rfdc'      : self.rfdc,
             'sync'      : self.sync,
-            #'noise'     : self.noise,
             'input'     : self.input,
-            #'delay'     : self.delay,
             'pfb'       : self.pfb,
-            #'mask'      : self.mask,
-            #'eq'        : self.eq,
             'pfbtvg'     : self.pfbtvg,
             'chanselect' : self.chanselect,
             'zoomfft'    : self.zoomfft,
             'zoomacc'    : self.zoomacc,
-						'mixer'      : self.mixer,
+            'mixer'      : self.mixer,
             'psb_chanselect' : self.psb_chanselect,
             'psb_offset_chanselect' : self.psb_offset_chanselect,
             'psb'        : self.psb,
@@ -329,7 +337,6 @@ class SoukMkidReadout():
             'output'       : self.output,
             'gen_cordic'   : self.gen_cordic,
             'gen_lut'      : self.gen_lut,
-            #'corr'      : self.corr,
             #'powermon'  : self.powermon,
         }
 
@@ -432,7 +439,7 @@ class SoukMkidReadout():
         assert len(freqs_hz) == n_tones
         assert len(phase_offsets_rads) == n_tones
         assert len(amplitudes) == n_tones
-        chanmap_in = np.zeros(self.chanselect.n_chans_out, dtype=int)
+        chanmap_in = -1*np.ones(self.chanselect.n_chans_out, dtype=int)
         chanmap_psb = -1*np.ones(self.psb_chanselect.n_chans_out, dtype=int)
         chanmap_psb_offset = -1*np.ones(self.psb_offset_chanselect.n_chans_out, dtype=int)
         lo_freqs_hz = np.zeros(n_tones, dtype=float)

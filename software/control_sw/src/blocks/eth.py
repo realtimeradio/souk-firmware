@@ -32,7 +32,7 @@ class Eth(Block):
         except:
             self.core = None
         if self.core is None:
-            self._warning("Couldn't find Ethernet core. Will retry later")
+            self.logger.warning("Couldn't find Ethernet core. Will retry later")
 
     def get_eth_core_details(self, read_arp=False):
         """

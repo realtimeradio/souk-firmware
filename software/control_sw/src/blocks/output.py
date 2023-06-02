@@ -51,7 +51,7 @@ class Output(Block):
         try:
             s = self.MODE_MAP[v]
         except KeyError:
-            self._error('Output mode not recognized')
+            self.logger.error('Output mode not recognized')
             s = 'Unknown'
         return s
 

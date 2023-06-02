@@ -43,7 +43,7 @@ class Rfdc(Block):
             # Return as if everything is fine
             return True
         if not f in available:
-            self._error(f"Clockfile {f} not in available files ({available})")
+            self.logger.error(f"Clockfile {f} not in available files ({available})")
             return False
         return True
 

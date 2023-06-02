@@ -30,57 +30,12 @@ class Block(object):
         self.host = host #casperfpga object
         # One logger per host. Multiple blocks share the same logger.
         # Multiple hosts should *not* share the same logger, since we can multithread over hosts.
-        self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(__name__ + ":%s" % (host.host)))
+        self.logger = logger or helpers.add_default_log_handlers(logging.getLogger(f"{__name__}:{host.host}:{name}"))
         self.name = name
         if (name is None) or (name == ''):
             self.prefix = ''
         else:
             self.prefix = name + '_'
-
-    def _prefix_log(self, msg):
-        """
-        Take a log message, and prefix it with "<block> - ".
-        Eg, take "Argh, I'm broken" and replace it with
-        "eq_tvg - Argh I'm broken"
-        """
-        prefix = "%s - " % self.name
-        return prefix + msg
-
-    def _debug(self, msg, *args, **kwargs):
-        """
-        A wrapper around self.logger.debug to prefix a debug log message.
-        """
-        self.logger.debug(self._prefix_log(msg), *args, **kwargs)
-
-    def _info(self, msg, *args, **kwargs):
-        """
-        A wrapper around self.logger.info to prefix an info message.
-        """
-        self.logger.info(self._prefix_log(msg), *args, **kwargs)
-
-    def _warning(self, msg, *args, **kwargs):
-        """
-        A wrapper around self.logger.warning to prefix a warning message.
-        """
-        self.logger.warning(self._prefix_log(msg), *args, **kwargs)
-
-    def _error(self, msg, *args, **kwargs):
-        """
-        A wrapper around self.logger.error to prefix an error message.
-        """
-        self.logger.error(self._prefix_log(msg), *args, **kwargs)
-
-    def _critical(self, msg, *args, **kwargs):
-        """
-        A wrapper around self.logger.critical to prefix a critical message.
-        """
-        self.logger.critical(self._prefix_log(msg), *args, **kwargs)
-
-    def _exception(self, msg, *args, **kwargs):
-        """
-        A wrapper around self.logger.exception to prefix an exception message.
-        """
-        self.logger.exception(self._prefix_log(msg), *args, **kwargs)
 
     def get_status(self):
         """
@@ -125,7 +80,7 @@ class Block(object):
                 stats = self.get_status()
                 flags = {}
             except:
-                self._error("Failed to call get_status successfully")
+                self.logger.error("Failed to call get_status successfully")
                 return
         for k, v in sorted(stats.items()):
             err = flags.get(k, el.FENG_OK)
@@ -134,11 +89,11 @@ class Block(object):
             msg = '%s: %s' % (k, v)
             if use_logger:
                 if err == el.FENG_OK:
-                    self._info(msg)
+                    self.logger.info(msg)
                 elif err in [el.FENG_NOTIFY, el.FENG_WARNING]:
-                    self._warning(msg)
+                    self.logger.warning(msg)
                 elif err == el.FENG_ERROR:
-                    self._error(msg)
+                    self.logger.error(msg)
             else:
                 color = colormap[err]
                 if use_color:
@@ -178,7 +133,7 @@ class Block(object):
             return self.host.read_int(self.prefix + reg, word_offset=word_offset, **kwargs)
         except:
             if reg not in self.listdev():
-                self._error("Tried to read register %s which doesn't exist!" % reg)
+                self.logger.error("Tried to read register %s which doesn't exist!" % reg)
             raise
 
     def write_int(self, reg, val, word_offset=0, **kwargs):
@@ -192,7 +147,7 @@ class Block(object):
             self.host.write_int(self.prefix + reg, val, word_offset=word_offset, **kwargs)
         except:
             if reg not in self.listdev():
-                self._error("Tried to read register %s which doesn't exist!" % reg)
+                self.logger.error("Tried to read register %s which doesn't exist!" % reg)
             else:
                 # Only raise an exception if the register is there, otherwise
                 # just skip the write
@@ -210,7 +165,7 @@ class Block(object):
             return self.host.read_uint(self.prefix + reg, word_offset=word_offset, **kwargs)
         except:
             if reg not in self.listdev():
-                self._error("Tried to read register %s which doesn't exist!" % reg)
+                self.logger.error("Tried to read register %s which doesn't exist!" % reg)
             raise
 
     def read(self, reg, nbytes, **kwargs):
@@ -225,7 +180,7 @@ class Block(object):
             return self.host.read(self.prefix + reg, nbytes, **kwargs)
         except:
             if reg not in self.listdev():
-                self._error("Tried to read register %s which doesn't exist!" % reg)
+                self.logger.error("Tried to read register %s which doesn't exist!" % reg)
             raise
 
     def write(self, reg, val, offset=0, **kwargs):
@@ -239,7 +194,7 @@ class Block(object):
             self.host.write(self.prefix + reg, val, offset=offset, **kwargs)
         except:
             if reg not in self.listdev():
-                self._error("Tried to read register %s which doesn't exist!" % reg)
+                self.logger.error("Tried to read register %s which doesn't exist!" % reg)
             else:
                 # Only raise an exception if the register is there, otherwise
                 # just skip the write
@@ -256,7 +211,7 @@ class Block(object):
             self.host.blindwrite(self.prefix + reg, val, **kwargs)
         except:
             if reg not in self.listdev():
-                self._error("Tried to read register %s which doesn't exist!" % reg)
+                self.logger.error("Tried to read register %s which doesn't exist!" % reg)
             else:
                 # Only raise an exception if the register is there, otherwise
                 # just skip the write

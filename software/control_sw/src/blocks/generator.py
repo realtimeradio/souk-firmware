@@ -47,11 +47,11 @@ class Generator(Block):
         if self.n_generators is None:
             self._get_block_params()
         if n >= self.n_generators:
-            self._error(f'Requested generator {n}, but only {self.n_generators} are provided')
+            self.logger.error(f'Requested generator {n}, but only {self.n_generators} are provided')
             return
         x = np.array(x)
         if len(x) != self.n_samples:
-            self._error(f'{len(x)} sample were provided but expected {self.n_samples}')
+            self.logger.error(f'{len(x)} sample were provided but expected {self.n_samples}')
             return
         imag = np.array(x.imag * 2**14, dtype='>i2')
         real = np.array(x.real * 2**14, dtype='>i2')
@@ -115,16 +115,16 @@ class Generator(Block):
                 freq_round_hz = round(freq_hz / freq_step_hz) * freq_step_hz
                 round_delta = freq_round_hz - freq_hz
                 if round_delta != 0:
-                    self._info(f"Rounded frequency from {freq_hz} to {freq_round_hz} to make continuous circular waveform (delta {round_delta})")
+                    self.logger.info(f"Rounded frequency from {freq_hz} to {freq_round_hz} to make continuous circular waveform (delta {round_delta})")
                     freq_hz = freq_round_hz
             x = np.exp(1j*2*np.pi*freq_hz*t) * amplitude
             if window:
-                self._info("Appling Hann window")
+                self.logger.info("Appling Hann window")
                 x *= np.hanning(self.n_samples)
             self.set_lut_output(n, x)
         else:
             if amplitude != 1.0:
-                self._warning("Amplitude setting not used for CORDIC generators")
+                self.logger.warning("Amplitude setting not used for CORDIC generators")
             phase_step = 2*np.pi * freq_hz / sample_rate_hz
             self.set_cordic_output(n, phase_step)
 
@@ -141,10 +141,10 @@ class Generator(Block):
         if self.n_generators is None:
             self._get_block_params()
         if n >= self.n_generators:
-            self._error(f'Requested generator {n}, but only {self.n_generators} are provided')
+            self.logger.error(f'Requested generator {n}, but only {self.n_generators} are provided')
             return
         if self.n_samples > 1:
-            self._error('This is a LUT generator, and provides no CORDIC capabilities')
+            self.logger.error('This is a LUT generator, and provides no CORDIC capabilities')
             return
         # phase should be in units of pi radians, and in range +/-1
         phase_scaled = p / np.pi
