@@ -5,6 +5,7 @@ import datetime
 from .block import Block
 from souk_mkid_readout.error_levels import *
 from souk_mkid_readout import __version__
+from souk_mkid_readout import __fwversion__
 
 import casperfpga.sysmon
 
@@ -56,6 +57,26 @@ class Fpga(Block):
         rev    = (v >>  8) & 0xff
         bugfix = (v >>  0) & 0xff
         return "%d.%d.%d.%d" % (major, minor, rev, bugfix)
+
+    def check_firmware_support(self):
+        """
+        Check the software packages firmware support version against
+        the running firmware version.
+
+        :return: True if firmware is supported, False otherwise.
+        :rtype bool:
+        """
+        vfw_str = self.get_firmware_version()
+        vsw_str = __fwversion__
+        vfw = vfw_str.split('.')
+        vsw = vsw_str.split('.')
+        # Check from major version down. If __fwversion__ says "A.B"
+        # then any A.B.x.y is deemed supported.
+        for vn, ver in enumerate(vsw):
+            if len(ver) > 0 and ver != vfw[vn]:
+                self._warning("Software supports FW rev %s, but not %s" % (vsw_str, vfw_str))
+                return False
+        return True
 
     def get_firmware_type(self):
         """
@@ -142,6 +163,9 @@ class Fpga(Block):
             - fw_type (int): The firmware type ID of the currently running
               firmware. Available only if the board is programmed.
 
+            - fw_supported (bool) : True if the running firmware is supported
+              by this software. False (and flagged as an error) otherwise.
+
             - fw_build_time (int): The build time of the firmware,
               as an ISO format string. Available only if the board 
               is programmed.
@@ -188,6 +212,9 @@ class Fpga(Block):
             stats['fw_version'] = self.get_firmware_version()
             stats['fw_type'] = self.get_firmware_type()
             stats['fw_build_time'] = datetime.datetime.fromtimestamp(self.get_build_time()).isoformat()
+            stats['fw_supported'] = self.check_firmware_support()
+            if not stats['fw_supported']:
+                flags['fw_supported'] = FENG_ERROR
         if self.sysmon is not None:
             try:
                 stats.update(self.sysmon.get_all_sensors())
