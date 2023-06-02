@@ -439,7 +439,7 @@ class SoukMkidReadout():
         assert len(freqs_hz) == n_tones
         assert len(phase_offsets_rads) == n_tones
         assert len(amplitudes) == n_tones
-        chanmap_in = np.zeros(self.chanselect.n_chans_out, dtype=int)
+        chanmap_in = -1*np.ones(self.chanselect.n_chans_out, dtype=int)
         chanmap_psb = -1*np.ones(self.psb_chanselect.n_chans_out, dtype=int)
         chanmap_psb_offset = -1*np.ones(self.psb_offset_chanselect.n_chans_out, dtype=int)
         lo_freqs_hz = np.zeros(n_tones, dtype=float)
