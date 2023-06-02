@@ -2,6 +2,7 @@ import time
 from numpy import log2
 
 from .block import Block
+from souk_mkid_readout.error_levels import *
 
 class Sync(Block):
     """
@@ -30,6 +31,8 @@ class Sync(Block):
     OFFSET_MAN_SYNC = 8
     OFFSET_ARM_NOISE = 9
     OFFSET_TT_LOAD_ARM = 10
+    OFFSET_ENABLE_LOOPBACK = 11
+    OFFSET_ENABLE_ERR_FLAG = 12
 
     def __init__(self, host, name, clk_hz=None, logger=None):
         super(Sync, self).__init__(host, name, logger)
@@ -76,19 +79,12 @@ class Sync(Block):
     #    """
     #    return self.read_uint('int_sync_count')
 
-    def get_latency(self):
-        """
-        :return: Number of FPGA clock ticks between sync transmission and reception
-        :rtype: int
-        """
-        return self.read_uint('latency') & 0xff
-
     def get_error_count(self):
         """
         :return: Number of sync errors.
         :rtype: int
         """
-        return self.read_uint('latency') >> 8
+        return self.read_uint('error')
 
     def reset_error_count(self):
         """
@@ -97,6 +93,30 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 0, self.OFFSET_RST_ERR)
         self.change_reg_bits('ctrl', 1, self.OFFSET_RST_ERR)
         self.change_reg_bits('ctrl', 0, self.OFFSET_RST_ERR)
+
+    def set_sync_active_high(self):
+        """
+        Set the sync pulse to active on a positive edge.
+        """
+        self.change_reg_bits('ctrl', 1, self.OFFSET_ACTIVE_HIGH)
+
+    def set_sync_active_low(self):
+        """
+        Set the sync pulse to active on a negative edge.
+        """
+        self.change_reg_bits('ctrl', 0, self.OFFSET_ACTIVE_HIGH)
+
+    def enable_error_flag(self):
+        """
+        Enable error flag.
+        """
+        self.change_reg_bits('ctrl', 1, self.OFFSET_ENABLE_ERR_FLAG)
+
+    def disable_error_flag(self):
+        """
+        Disable error flag.
+        """
+        self.change_reg_bits('ctrl', 0, self.OFFSET_ENABLE_ERR_FLAG)
     
     def wait_for_sync(self):
         """
@@ -432,7 +452,9 @@ class Sync(Block):
         stats['uptime_fpga_clks'] = self.uptime()
         stats['period_fpga_clks'] = self.period()
         stats['ext_count'] = self.count_ext()
-        #stats['int_count'] = self.count_int()
+        stats['error_count'] = self.get_error_count()
+        if stats['error_count'] != 0:
+            flags['error_count'] = FENG_WARNING
         return stats, flags
 
     def initialize(self, read_only=False):
@@ -448,6 +470,6 @@ class Sync(Block):
             pass
         else:
             self.write_int('ctrl', 0)
-            # Set output pulse rate to 1 per 2**29 clocks (every ~2.7 seconds)
-            #self.set_output_sync_rate(0xe0000000)
+            self.set_sync_active_high()
+            self.enable_error_flag()
             self.reset_error_count()
