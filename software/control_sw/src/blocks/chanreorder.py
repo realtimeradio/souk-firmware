@@ -86,6 +86,9 @@ class ChanReorder(Block):
                           dtype='>%s' % self._map_format)
         parallel_maps = np.zeros([self._n_serial_chans_in, self._n_parallel_chans_out],
                           dtype='>i1')
+        # Keep track of which entries have been written so we can warn if something is overwritten
+        serial_maps_written = np.zeros([self._n_parallel_chans_in, self._n_serial_chans_in], dtype=int)
+        parallel_maps_written = np.zeros([self._n_serial_chans_in, self._n_parallel_chans_out], dtype=int)
         # outn is where we want this channel in the output
         # outchan is where this channel is at the input
         for outn, outchan in enumerate(outmap):
@@ -102,13 +105,22 @@ class ChanReorder(Block):
             # Which output serial position would we like outchan to be in
             out_spos = outn // self._n_parallel_chans_out
             # build maps appropriately
-            self._debug(f'Chan {outchan} Setting input {in_pstream}:{in_spos} to {out_pstream}:{out_spos}')
+            self.logger.debug(f'Chan {outchan} Setting input {in_pstream}:{in_spos} to {out_pstream}:{out_spos}')
             if outchan != -1:
+                if serial_maps_written[in_pstream, out_spos] != 0:
+                    self.logger.warning('Potential serial reorder clash!')
+                if parallel_maps_written[out_spos, out_pstream] != 0:
+                    self.logger.warning('Potential parallel reorder clash!')
                 serial_maps[in_pstream, out_spos] = in_spos
                 parallel_maps[out_spos, out_pstream] = in_pstream
+                serial_maps_written[in_pstream, out_spos] = 1
+                parallel_maps_written[out_spos, out_pstream] = 1
             else:
                 # Use special mux input which is tied to 0
+                if parallel_maps_written[out_spos, out_pstream] != 0:
+                    self.logger.warning('Potential parallel reorder clash!')
                 parallel_maps[out_spos, out_pstream] = self._n_parallel_chans_in + 1
+                parallel_maps_written[out_spos, out_pstream] = 1
         for i in range(self._n_parallel_chans_in):
             self.write(f'reorder_{i}_{self._map_reg}', serial_maps[i].tobytes())
         self.write('pmap', parallel_maps.reshape(self.n_chans_out).tobytes())
@@ -172,7 +184,7 @@ class ChanReorder(Block):
         :param inidx: Input channel index to select.
         :type inidx: int
         """
-        self._info(f'Setting output {outidx} to channel {inidx}')
+        self.logger.info(f'Setting output {outidx} to channel {inidx}')
         chanmap = self.get_channel_outmap()
         chanmap[outidx] = inidx
         self.set_channel_outmap(chanmap)

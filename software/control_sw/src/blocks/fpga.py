@@ -74,7 +74,7 @@ class Fpga(Block):
         # then any A.B.x.y is deemed supported.
         for vn, ver in enumerate(vsw):
             if len(ver) > 0 and ver != vfw[vn]:
-                self._warning("Software supports FW rev %s, but not %s" % (vsw_str, vfw_str))
+                self.logger.warning("Software supports FW rev %s, but not %s" % (vsw_str, vfw_str))
                 return False
         return True
 

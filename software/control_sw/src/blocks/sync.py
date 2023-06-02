@@ -127,7 +127,7 @@ class Sync(Block):
         c = self.count_ext()
         while(self.count_ext() == c):
             if time.time() > ttimeout:
-                self._warning("Timed out waiting for sync pulse")
+                self.logger.warning("Timed out waiting for sync pulse")
                 break
             time.sleep(self.sync_wait_sleep_period_s)
 
@@ -148,7 +148,7 @@ class Sync(Block):
     #    while(c1 == c0):
     #        c1 = self.read_uint('tt_lsb')
     #        if time.time() > (t0 + timeout):
-    #            self._warning("Timed out waiting for PPS")
+    #            self.logger.warning("Timed out waiting for PPS")
     #            return -1
     #        time.sleep(0.05)
     #    return c1
@@ -220,22 +220,22 @@ class Sync(Block):
     #    has_pps = (x >= 0)
     #    if not has_pps:
     #        # Timed out, probably because this isn't the TT SNAP2 with PPS
-    #        self._info("Skipping telescope time update, because this board doesn't have a PPS")
+    #        self.logger.info("Skipping telescope time update, because this board doesn't have a PPS")
     #        return
     #    now = time.time()
     #    next_pps = int(now) + 1
-    #    self._info("Loading new telescope time at %s" % time.ctime(next_pps))
+    #    self.logger.info("Loading new telescope time at %s" % time.ctime(next_pps))
     #    target_tt = int(next_pps * fs_hz)
     #    delay = next_pps - time.time()
     #    if delay < 0.2:
-    #        self._error("Took too long to generate software sync")
+    #        self.logger.error("Took too long to generate software sync")
     #    self.load_telescope_time(target_tt, software_load=False)
     #    loaded_time = time.time()
     #    spare = next_pps - loaded_time
     #    if spare < 0.2:
-    #        self._warning("TT loaded with only %.2f seconds to spare" % spare)
+    #        self.logger.warning("TT loaded with only %.2f seconds to spare" % spare)
     #    if spare < 0:
-    #        self._error("TT loaded after the expected PPS arrival!")
+    #        self.logger.error("TT loaded after the expected PPS arrival!")
     #    # Now wait for a PPS so that the TT will have been loaded before anything else happend
     #    if has_pps:
     #        self.wait_for_pps()
@@ -308,7 +308,7 @@ class Sync(Block):
         tt = (self.read_uint('ext_sync_tt_msb') << 32) + self.read_uint('ext_sync_tt_lsb')
         sync_number_reread = self.count_ext()
         if sync_number_reread != sync_number:
-            self._error("Failed to read TT without being interrupted by a sync. Is the sync rate very high?")
+            self.logger.error("Failed to read TT without being interrupted by a sync. Is the sync rate very high?")
             raise RuntimeError
         return tt, sync_number
 
@@ -356,25 +356,25 @@ class Sync(Block):
             raise RuntimeError(message)
 
         sync_period = (tt1 - tt0) / (sync1 - sync0)
-        self._info("Detected sync period %.1f (2^%.1f) clocks" % (sync_period, log2(sync_period)))
+        self.logger.info("Detected sync period %.1f (2^%.1f) clocks" % (sync_period, log2(sync_period)))
         sync_period = int(sync_period)
         sync_period_s = sync_period / fs_hz
         sync_period_ms = 1000*sync_period_s
         sync_period_us = 1000000*sync_period_s
-        self._info("Detected sync period is %.3f milliseconds" % (sync_period_ms))
+        self.logger.info("Detected sync period is %.3f milliseconds" % (sync_period_ms))
         # Check the offset of a sync from NTP time
         self.wait_for_sync()
         ntp_us = 1000000*time.time()
         ntp_offset_us = int(ntp_us) % 1000000 # offset from NTP 1s boundary in microsec
         ntp_offset_f = (ntp_offset_us / sync_period_us) % 1 # fraction of a period offset
-        self._info("NTP offset usecs: ntp_offset_us: %d" % ntp_offset_us)
+        self.logger.info("NTP offset usecs: ntp_offset_us: %d" % ntp_offset_us)
         # Wrap fractional offsets
         if ntp_offset_f > 0.5:
             ntp_offset_f -= 1
-        self._info("Last sync pulse arrived at time %.5f" % (ntp_us / 1e6))
-        self._info("Sync pulses offset from NTP by %d us" % (ntp_offset_f * sync_period_us))
+        self.logger.info("Last sync pulse arrived at time %.5f" % (ntp_us / 1e6))
+        self.logger.info("Sync pulses offset from NTP by %d us" % (ntp_offset_f * sync_period_us))
         if abs(ntp_offset_f) > 0.1:
-            self._warning("Sync pulses offset from NTP by %.2f of a period" % ntp_offset_f)
+            self.logger.warning("Sync pulses offset from NTP by %.2f of a period" % ntp_offset_f)
         
         # We assume that the master TT is tracking clocks since unix epoch.
         # Syncs should come every `sync_period` ADC clocks
@@ -390,12 +390,12 @@ class Sync(Block):
 
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
-            self._error("Took too long to configure telescope time register")
+            self.logger.error("Took too long to configure telescope time register")
         offset_samples = offset_ns * (fs_hz*1e-9)
         offset_samples_aligned = round(offset_samples/sync_clock_factor) * sync_clock_factor # maintain factor
         self.offset_ns = offset_samples_aligned / (fs_hz*1e-9)
 
-        self._info(
+        self.logger.info(
             "Offset of {} ns ({} samples) applied (requested {} ns ({} samples), rounded the nearest multiple of {} samples)".format(
             self.offset_ns, offset_samples_aligned,
             offset_ns, offset_samples,
@@ -407,20 +407,20 @@ class Sync(Block):
         self.load_internal_time(next_sync_clocks+1, software_load=False) # +1 because counter loads clock after sync
         loaded_time = time.time()
         spare = next_sync - loaded_time + ((ntp_offset_f * sync_period_us)/ 1e6)
-        #self._info("Next sync time: %.3f" % next_sync)
-        #self._info("Loaded time: %.3f" % loaded_time)
-        #self._info("NTP offset: %.5f" % (ntp_offset_us/1e6))
-        self._info("Loaded new telescope time (%d) for %s (%.4f)" % (next_sync_clocks, time.ctime(next_sync), next_sync))
-        self._info("Load completed at %.4f" % loaded_time)
+        #self.logger.info("Next sync time: %.3f" % next_sync)
+        #self.logger.info("Loaded time: %.3f" % loaded_time)
+        #self.logger.info("NTP offset: %.5f" % (ntp_offset_us/1e6))
+        self.logger.info("Loaded new telescope time (%d) for %s (%.4f)" % (next_sync_clocks, time.ctime(next_sync), next_sync))
+        self.logger.info("Load completed at %.4f" % loaded_time)
         # Wait for a sync to pass so the TT is laoded before anything else happens
         self.wait_for_sync()
         if spare < 0:
-            self._error("Internal TT loaded after the expected sync arrival!")
+            self.logger.error("Internal TT loaded after the expected sync arrival!")
             return None
         if spare < sync_period_s / 4: # Must have loaded at least 1/4 period before sync
-            self._warning("Internal TT loaded with only %.2f milliseconds to spare" % (1000*spare))
+            self.logger.warning("Internal TT loaded with only %.2f milliseconds to spare" % (1000*spare))
         else:
-            self._info("Internal TT loaded with %.2f milliseconds to spare" % (1000*spare))
+            self.logger.info("Internal TT loaded with %.2f milliseconds to spare" % (1000*spare))
         return next_sync_clocks
 
     def get_status(self):

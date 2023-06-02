@@ -239,10 +239,10 @@ class Packetizer(Block):
         assert pkt_size <= MAX_PACKET_SIZE_BYTES, "Can't send packets > %d bytes!" % MAX_PACKET_SIZE_BYTES
 
         # Figure out what fraction of channels we can fit on the link
-        self._info("Full data rate is %.2f Gbps" % self.full_data_rate_gbps)
+        self.logger.info("Full data rate is %.2f Gbps" % self.full_data_rate_gbps)
         req_gbps = self.full_data_rate_gbps / self.n_ants / self.n_chans * n_chan_send * n_ant_send
 
-        self._info("Trying to send %d ants and %d chans (%.2f Gbps)" % (n_ant_send, n_chan_send, req_gbps))
+        self.logger.info("Trying to send %d ants and %d chans (%.2f Gbps)" % (n_ant_send, n_chan_send, req_gbps))
         assert req_gbps <= occupation * self.line_rate_gbps, "Too much data!"
 
         # How many slots do we need to send the required data
@@ -250,25 +250,25 @@ class Packetizer(Block):
         assert n_ant_send <= self.n_ants
         assert n_chan_send % n_pkt_chans == 0, "Number of channels to send is not integer number of packets"
         req_packets = n_ant_send * n_chan_send // n_pkt_chans
-        self._info("Sending %d antenna-channels as %d packets" % (n_chan_send*n_ant_send, req_packets))
+        self.logger.info("Sending %d antenna-channels as %d packets" % (n_chan_send*n_ant_send, req_packets))
         req_words = n_chan_send * n_ant_send * self.n_words_per_chan
         assert (n_chan_send * self.n_words_per_chan) % self.granularity == 0
         req_slots = req_words // self.granularity
         assert req_slots % req_packets == 0
         req_slots_per_pkt = req_slots // req_packets
-        self._info("Sending %d words in %d slots" % (req_words, req_slots))
+        self.logger.info("Sending %d words in %d slots" % (req_words, req_slots))
         spare_slots = self.n_slots - req_slots
-        self._info("%d spare slots available" % spare_slots)
+        self.logger.info("%d spare slots available" % spare_slots)
         assert spare_slots >= req_packets
 
         # Divvy up the spare slots as evenly as we can
         spare_slots_per_pkt = spare_slots // req_packets
-        self._info("%d spare slots per packet" % spare_slots_per_pkt)
+        self.logger.info("%d spare slots per packet" % spare_slots_per_pkt)
         # Need at least two words of spare space for EOF, and then a cycle of invalid data (irrational 100GbE core requirement)
         assert spare_slots_per_pkt > 0, "Need at least one spare slot per packet!"
         assert spare_slots_per_pkt*self.granularity >= 2, "Need at least two spare words per packet"
         total_slots_used = req_slots + (req_packets * spare_slots_per_pkt)
-        self._info("%d used slots for data and spacing" % total_slots_used)
+        self.logger.info("%d used slots for data and spacing" % total_slots_used)
         assert total_slots_used <= self.n_slots
 
         # Now we know where the slots are, figure out what channels / inputs they
@@ -342,7 +342,7 @@ class Packetizer(Block):
 
         def check_length(x, expected_len, name):
             if len(x) != expected_len:
-                self._error("%s list length %d for %d packets" % (name, len(x), expected_len))
+                self.logger.error("%s list length %d for %d packets" % (name, len(x), expected_len))
                 raise RuntimeError
 
         if enable is None:

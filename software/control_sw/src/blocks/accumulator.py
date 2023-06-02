@@ -117,7 +117,7 @@ class Accumulator(Block):
                 dout[i::self._n_parallel_chans].imag = d[:]
         stop_acc_cnt = self.get_acc_cnt()
         if start_acc_cnt != stop_acc_cnt:
-            self._warning('Accumulation counter changed while reading data!')
+            self.logger.warning('Accumulation counter changed while reading data!')
         return dout
 
     def get_new_spectra(self):

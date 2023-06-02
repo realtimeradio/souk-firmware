@@ -197,7 +197,7 @@ class AutoCorr(Block):
             try:
                 from scipy.signal import medfilt
             except:
-                self._exception('Failed to import scipy.signal, which is needed for median filtering')
+                self.logger.exception('Failed to import scipy.signal, which is needed for median filtering')
                 raise
 
         auto_flush = False
@@ -206,10 +206,10 @@ class AutoCorr(Block):
                 old_mux_state = self._get_mux()
             self._set_mux(signal_block)
             if flush_vacc == 'auto' and signal_block != old_mux_state:
-                self._debug("Will auto-flush vacc because multiplexer changed state")
+                self.logger.debug("Will auto-flush vacc because multiplexer changed state")
                 auto_flush = True
         if flush_vacc == True or auto_flush:
-            self._debug("Flushing accumulation")
+            self.logger.debug("Flushing accumulation")
             self._wait_for_acc()
         self._arm_readout()
         acc_cnt = self._wait_for_acc()
