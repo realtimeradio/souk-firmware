@@ -6,8 +6,9 @@ import souk_mkid_readout
 
 s=souk_mkid_readout.SoukMkidReadout('rfsoc4x2',configfile='/home/jackh/src/souk-firmware/software/control_sw/config/souk-single-pipeline-4x2.yaml')
 
-s.program()
-s.initialize()
+if not s.fpga.is_programmed():
+    s.program()
+    s.initialize()
 s.fpga.print_status()
 
 DAC_SAMPLE_RATE = 4915.2e6
