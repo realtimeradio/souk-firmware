@@ -236,6 +236,7 @@ class SoukMkidReadout():
                                 n_chans_in=N_RX_FFT,
                                 n_chans_out=N_TONE,
                                 n_parallel_chans_in=16,
+                                parallel_first=True,
                                 support_zeroing=True,
                             )
         #: Control interface to Zoom FFT
@@ -286,6 +287,7 @@ class SoukMkidReadout():
                                 n_chans_in=N_TONE,
                                 n_chans_out=N_TX_FFT,
                                 n_parallel_chans_in=8,
+                                parallel_first=False,
                                 support_zeroing=True,
                             )
         #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
@@ -293,6 +295,7 @@ class SoukMkidReadout():
                                 n_chans_in=N_TONE,
                                 n_chans_out=N_TX_FFT,
                                 n_parallel_chans_in=8,
+                                parallel_first=False,
                                 support_zeroing=True,
                             )
         #: Control interface to Polyphase Synthesizer block
