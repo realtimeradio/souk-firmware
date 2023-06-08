@@ -38,6 +38,7 @@ def fast_read_bram(acc, addrs, nbytes):
     stop_acc_cnt = acc.get_acc_cnt()
     if start_acc_cnt != stop_acc_cnt:
         acc.logger.warning('Accumulation counter changed while reading data!')
+        return None
     return dout
 
 
@@ -46,13 +47,26 @@ def main():
     acc = r.accumulators[ACCNUM]
     addrs, nbytes = get_bram_addresses(acc)
     N=20
-    acc._wait_for_acc(0.002)
+    acc._wait_for_acc(0.00005)
     t0 = time.time()
+    err_cnt = 0
+    times = []
     for i in range(N):
-        #acc._wait_for_acc(0.002)
-        fast_read_bram(acc, addrs, nbytes)
+        acc._wait_for_acc(0.00005)
+        tt0 = time.time()
+        x = fast_read_bram(acc, addrs, nbytes)
+        if x is None:
+            err_cnt += 1
+        tt1 = time.time()
+        times += [tt1 - tt0]
     t1 = time.time()
-    print((t1-t0)/N * 1000)
+    avg_read_ms = np.mean(times)*1000
+    max_read_ms = np.max(times)*1000
+    avg_loop_ms = (t1-t0)/N * 1000
+    print(f'Average read time: {avg_read_ms}')
+    print(f'Max read time: {max_read_ms}')
+    print(f'Average loop time: {avg_loop_ms}')
+    print(f'Number of too slow reads: {err_cnt}')
 
 if __name__ == '__main__':
     main()
