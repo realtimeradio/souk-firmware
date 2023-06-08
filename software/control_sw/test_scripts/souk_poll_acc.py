@@ -7,6 +7,8 @@ from souk_mkid_readout import SoukMkidReadout
 
 CONFFILE = '/home/casper/git/souk-firmware/software/control_sw/config/souk-single-pipeline-4x2.yaml'
 ACCNUM = 0
+WAIT_FOR_IP_ADDR = True
+NLOOP = 20
 
 def get_bram_addresses(acc):
     addrs = []
@@ -41,17 +43,32 @@ def fast_read_bram(acc, addrs, nbytes):
         return None
     return dout
 
+def wait_non_zero_ip(acc, poll_time_s=5):
+    loop_cnt = 0
+    while True:
+        ip = acc.get_dest_ip()
+        if ip == '0.0.0.0':
+            time.sleep(poll_time_s)
+            ip = acc.get_dest_ip()
+        else:
+            if loop_cnt > 0:
+                print('Got non-zero IP')
+            break
+        loop_cnt += 1
+    return
 
 def main():
     r = SoukMkidReadout('localhost', configfile=CONFFILE, local=True)
     acc = r.accumulators[ACCNUM]
     addrs, nbytes = get_bram_addresses(acc)
-    N=20
     acc._wait_for_acc(0.00005)
     t0 = time.time()
     err_cnt = 0
+    loop_cnt = 0
     times = []
-    for i in range(N):
+    while True:
+        if WAIT_FOR_IP_ADDR:
+            wait_non_zero_ip(acc)
         acc._wait_for_acc(0.00005)
         tt0 = time.time()
         x = fast_read_bram(acc, addrs, nbytes)
@@ -59,10 +76,13 @@ def main():
             err_cnt += 1
         tt1 = time.time()
         times += [tt1 - tt0]
+        loop_cnt += 1
+        if loop_cnt == NLOOP:
+            break
     t1 = time.time()
     avg_read_ms = np.mean(times)*1000
     max_read_ms = np.max(times)*1000
-    avg_loop_ms = (t1-t0)/N * 1000
+    avg_loop_ms = (t1-t0)/loop_cnt * 1000
     print(f'Average read time: {avg_read_ms}')
     print(f'Max read time: {max_read_ms}')
     print(f'Average loop time: {avg_loop_ms}')
