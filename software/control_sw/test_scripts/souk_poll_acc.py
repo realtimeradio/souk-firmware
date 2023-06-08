@@ -37,7 +37,7 @@ def fast_read_bram(acc, addrs, nbytes):
         dout[i::nbranch] = np.frombuffer(raw, dtype='>i8')
     stop_acc_cnt = acc.get_acc_cnt()
     if start_acc_cnt != stop_acc_cnt:
-        acc._warning('Accumulation counter changed while reading data!')
+        acc.logger.warning('Accumulation counter changed while reading data!')
     return dout
 
 
