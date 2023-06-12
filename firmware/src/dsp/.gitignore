@@ -2,6 +2,8 @@ ospfb_2x_4096c_8i/*
 !ospfb_2x_4096c_8i/*.dcp
 cordic_8x/*
 !cordic_8x/*.dcp
+cordic_1x/*
+!cordic_1x/*.dcp
 ospfb_2x_4096c_8i_16o/*
 !ospfb_2x_4096c_8i_16o/*.dcp
 nospfb_2x_4096c_8i_16o/*
