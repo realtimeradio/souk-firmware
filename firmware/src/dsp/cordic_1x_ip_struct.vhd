@@ -24,7 +24,7 @@ architecture structural of cordic_1x_ip_struct is
       scale : in std_logic_vector( 32-1 downto 0 );
       sync  : in std_logic_vector( 1-1 downto 0 );
       rst  : in std_logic_vector( 1-1 downto 0 );
-      ce_1  : in std_logic;
+      clk : in std_logic;
       lo_out : out std_logic_vector( 36-1 downto 0 );
       sync_out : out std_logic_vector( 1-1 downto 0 )
     );
