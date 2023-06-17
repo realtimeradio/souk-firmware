@@ -32,8 +32,8 @@ architecture structural of os_polyphase_synth_ip_struct is
 begin
   os_polyphase_synth_ip_inst : os_polyphase_synth
   port map (
+    din0 => din0,
     din1 => din1,
-    din2 => din2,
     shift    => shift, 
     sync     => sync, 
     clk      => clk_1, 
