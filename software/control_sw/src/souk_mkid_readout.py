@@ -185,9 +185,13 @@ class SoukMkidReadout():
         self._cfpga.upload_to_ram_and_program(self.fpgfile)
         self._initialize_blocks()
 
-    def _initialize_blocks(self):
+    def _initialize_blocks(self, ignore_unsupported=False):
         """
         Initialize firmware blocks, populating the ``blocks`` attribute.
+
+        :param ignore_unsupported: If True, try initializing all blocks even if the firmware
+            version doesn't match that supported by this software.
+        :type ignore_unsupported: bool
         """
         # blocks
         prefix = f'p{self.pipeline_id}_'
@@ -195,7 +199,8 @@ class SoukMkidReadout():
         self.fpga        = fpga.Fpga(self._cfpga, "")
         if not self.fpga.check_firmware_support():
             self.logger.error('Firmware not supported. Try reprogramming with self.program()')
-            raise RuntimeError
+            if not ignore_unsupported:
+                raise RuntimeError
         #: Control interface to RFDC block
         self.rfdc        = rfdc.Rfdc(self._cfpga, 'rfdc',
                                lmkfile=self.config.get('lmkfile', None),
