@@ -268,7 +268,7 @@ class Mixer(Block):
         phase_steps = np.array(phase_steps, dtype='>u4')
         phase_offsets = np.array(phase_offsets, dtype='>u4')
         scaling = np.array(scaling, dtype='>u4')
-        for i in range(self._n_parallel_chans):
+        for i in range(min(self._n_parallel_chans, n_tone)):
             regprefix = f'lo{i}'
             self.write(regprefix + '_scale', scaling[i::self._n_parallel_chans].tobytes())
             self.write(regprefix + '_phase_inc', phase_steps[i::self._n_parallel_chans].tobytes())
