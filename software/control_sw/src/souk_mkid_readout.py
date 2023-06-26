@@ -193,6 +193,9 @@ class SoukMkidReadout():
         prefix = f'p{self.pipeline_id}_'
         #: Control interface to high-level FPGA functionality
         self.fpga        = fpga.Fpga(self._cfpga, "")
+        if not self.fpga.check_firmware_support():
+            self.logger.error('Firmware not supported. Try reprogramming with self.program()')
+            raise RuntimeError
         #: Control interface to RFDC block
         self.rfdc        = rfdc.Rfdc(self._cfpga, 'rfdc',
                                lmkfile=self.config.get('lmkfile', None),
