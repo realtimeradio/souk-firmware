@@ -93,7 +93,7 @@ class ChanReorder(Block):
         `ValueError` is raised
 
         :param outmap: The outmap to which data should be mapped. I.e., if
-            `outmap[0] = 16`, then the first channel out of the reordr block
+            `outmap[0] = 16`, then the first channel out of the reorder block
             will be channel 16. 
         :type outmap: list of int
 

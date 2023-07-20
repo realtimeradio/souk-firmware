@@ -7,15 +7,8 @@ from souk_mkid_readout.error_levels import *
 
 class Accumulator(Block):
     """
-    Instantiate a control interface for an Auto-Correlation block. This
-    provides auto-correlation spectra of post-FFT data.
-
-    In order to save FPGA resourece, the auto-correlation block may use a single
-    correlation core to compute the auto-correlation of a subset of the total
-    number of ADC channels at any given time. This is the case when the
-    block is instantiated with ``n_cores > 1`` and ``use_mux=True``.
-    In this case, auto-correlation spectra are captured ``n_signals / n_cores``
-    channels at a time. 
+    Instantiate a control interface for an Accumulator Block. This
+    provides a vector accumulation of post-FFT data.
 
     :param host: CasperFpga interface for host.
     :type host: casperfpga.CasperFpga
@@ -280,15 +273,8 @@ class Accumulator(Block):
 
 class WindowedAccumulator(Accumulator):
     """
-    Instantiate a control interface for an Auto-Correlation block. This
-    provides auto-correlation spectra of post-FFT data.
-
-    In order to save FPGA resourece, the auto-correlation block may use a single
-    correlation core to compute the auto-correlation of a subset of the total
-    number of ADC channels at any given time. This is the case when the
-    block is instantiated with ``n_cores > 1`` and ``use_mux=True``.
-    In this case, auto-correlation spectra are captured ``n_signals / n_cores``
-    channels at a time. 
+    Instantiate a control interface for a Windowed Accumulator Block. This
+    block applies a window to data prior to a vector accumulation of post-FFT data.
 
     :param host: CasperFpga interface for host.
     :type host: casperfpga.CasperFpga
