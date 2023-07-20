@@ -5,7 +5,7 @@ import os
 ver = '0.0.1'
 try:
     import subprocess
-    ver = ver + '-' + subprocess.check_output(['git', 'describe', '--abbrev=8', '--always', '--dirty', '--tags']).decode().strip()
+    ver = ver + '+' + subprocess.check_output(['git', 'describe', '--abbrev=8', '--always', '--dirty', '--tags']).decode().strip()
     print('Version is: %s' % ver)
 except:
     print('Couldn\'t get version from git. Defaulting to %s' % ver)
