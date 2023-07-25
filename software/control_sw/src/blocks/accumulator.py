@@ -125,7 +125,7 @@ class Accumulator(Block):
         return self._read_bram()
 
 
-    def plot_spectra(self, power=True, db=True, show=True, fftshift=True, sample_rate_hz=None):
+    def plot_spectra(self, power=True, db=True, show=True, fftshift=False, sample_rate_hz=None):
         """
         Plot the spectra of all signals in a single signal_block,
         with accumulation length divided out
