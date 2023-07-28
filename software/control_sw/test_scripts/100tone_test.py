@@ -27,7 +27,7 @@ def setfreqlut(r,target_frequency):
     actual_frequency=round((target_frequency - MIXFREQ) / LUT_FREQUENCY_RESOLUTION) * LUT_FREQUENCY_RESOLUTION
     r.gen_lut.set_output_freq(0,
                                actual_frequency,
-                               sample_rate_mhz=s.adc_clk_mhz,
+                               sample_rate_hz=r.adc_clk_hz,
                                amplitude=1)
     return actual_frequency+MIXFREQ
 
@@ -36,7 +36,7 @@ def setfreqcordic(r,freq_hz,cordic_id=-1):
     r.output.use_cordic()
     r.gen_cordic.set_output_freq(cordic_id,
                                   (freq_hz-MIXFREQ),
-                                  sample_rate_mhz=s.adc_clk_mhz)
+                                  sample_rate_hz=r.adc_clk_hz)
 def setfreqpsb(r,freq_hz,phase=0):
     print(f'Setting freq {freq_hz} Hz; phase {phase} rads')
     freq_hz=np.atleast_1d(freq_hz)

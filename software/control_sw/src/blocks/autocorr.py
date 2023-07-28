@@ -179,7 +179,7 @@ class AutoCorr(Block):
         :type flush_vacc: Bool or string
 
         :param filter_ksize: If not None, apply a spectral median filter
-            with this kernel size. The kernet size should be odd.
+            with this kernel size. The kernel size should be odd.
         :type filter_ksize: int
 
         :param return_list: If True, return a list else numpy.array
