@@ -4,7 +4,7 @@ from .block import Block
 
 class Mixer(Block):
     """
-    Instantiate a control interface for a Channel Reorder block.
+    Instantiate a control interface for a Mixer block.
 
     :param host: CasperFpga interface for host.
     :type host: casperfpga.CasperFpga
