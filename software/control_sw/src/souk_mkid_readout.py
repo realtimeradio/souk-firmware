@@ -265,6 +265,7 @@ class SoukMkidReadout():
                                 n_parallel_chans=8,
                                 phase_bp=30,
                                 phase_offset_bp=31,
+                                n_scale_bits=12,
                             )
         #: Control interface to Accumulator Blocks
         self.accumulators   =  []
