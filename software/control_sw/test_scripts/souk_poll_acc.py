@@ -38,11 +38,11 @@ def fast_read_bram(acc, addrs, nbytes):
     """
     nbranch = len(addrs)
     base_addr = addrs[0]
-    dout = np.zeros(acc.n_chans * 2, dtype='>i4')
+    dout = np.zeros(acc.n_chans, dtype='<i8') # 8 bytes for real+imag
     start_acc_cnt = acc.get_acc_cnt()
     for i, addr in enumerate(addrs):
         raw = acc.host.transport.axil_mm[addr:addr + nbytes]
-        dout[i::nbranch] = np.frombuffer(raw, dtype='>i4')
+        dout[i::nbranch] = np.frombuffer(raw, dtype='<i8')
     stop_acc_cnt = acc.get_acc_cnt()
     if start_acc_cnt != stop_acc_cnt:
         acc.logger.warning('Accumulation counter changed while reading data!')
