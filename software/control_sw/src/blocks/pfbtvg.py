@@ -138,7 +138,7 @@ class PfbTvg(Block):
         for r in range(self._n_rams):
             ram = core_name + '_%d' % r
             n_samples = self.n_chans // self._n_rams
-            n_bytes = self.n_samples * struct.calcsize(self._format)
+            n_bytes = n_samples * 2*struct.calcsize(self._format) # to for real+imag
             s = self.read(ram, n_bytes, offset=offset)
             d = struct.unpack('>%d%s' % (2*n_samples, self._format), s)
             dr = d[0::2]
@@ -148,8 +148,7 @@ class PfbTvg(Block):
                 for s in range(self._n_samples_per_word):
                     i = self._n_samples_per_word * self._n_rams * w + \
                         self._n_samples_per_word * r + s
-                    out[i].real = dr[j]
-                    out[i].imag = dr[j]
+                    out[i] = dr[j] + di[j]
                     j += 1
         return out
 
