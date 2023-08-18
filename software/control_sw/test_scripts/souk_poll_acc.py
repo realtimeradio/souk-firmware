@@ -72,7 +72,7 @@ def format_packets(t, d, error=False, pkt_nbyte=1024):
         uint64 accumulation_index # increments by 1 with each new accumulation
         uint32 error flag # 1 if there was a read error, likely because this code is too slow for the selected integration length
         uint32 packet_index # Index of this packet within a single accumulation
-        int32[channels, real/imag] # Data payload
+        int32  data[channels, real/imag] # Data payload
 
     All entries are big-endian, except data payload which is little-endian
     """
