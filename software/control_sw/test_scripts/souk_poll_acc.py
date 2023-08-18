@@ -74,7 +74,7 @@ def format_packets(t, d, error=False, pkt_nbyte=1024):
         uint32 packet_index # Index of this packet within a single accumulation
         int32[channels, real/imag] # Data payload
 
-    All entries are big-endian
+    All entries are big-endian, except data payload which is little-endian
     """
     payload_bytes = d.tobytes()
     payload_nbyte = len(payload_bytes)
