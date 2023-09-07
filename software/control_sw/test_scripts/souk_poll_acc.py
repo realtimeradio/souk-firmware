@@ -24,6 +24,29 @@ def get_bram_addresses(acc):
         assert addrs[i] == addrs[i-1] + nbytes
     return addrs, nbytes
 
+def get_bram_addresses_mixer(mixer):
+    addrs = []
+    nbytes = mixer._n_serial_chans * 4 # phases in 4 byte words
+    for i in range(mixer._n_parallel_chans):
+        ramname = f'{mixer.prefix}lo{i}_phase_inc'
+        addrs += [mixer.host.transport._get_device_address(ramname)]
+    # This test isn't valid, because there are other devices sitting between
+    # the phase increment brams
+    #for i in range(1, mixer._n_parallel_chans):
+    #    assert addrs[i] == addrs[i-1] + nbytes, addrs
+    return addrs, nbytes
+
+def fast_write_mixer(mixer, phases, addrs, nbytes):
+    phases = phases.reshape(mixer._n_parallel_chans, mixer._n_serial_chans)
+    # Seemingly can't write more than 512 bytes in one go.
+    # Assume nbytes is a multiple of 512
+    n_write = (nbytes // 512)
+    for i, addr in enumerate(addrs):
+        raw = phases[i].tobytes()
+        for j in range(n_write):
+            mixer.host.transport.axil_mm[addr+j*512:addr +(j+1)*512] = raw[j*512:(j+1)*512]
+
+
 def fast_read_bram(acc, addrs, nbytes):
     """
     Read RAM containing accumulated spectra.
@@ -92,7 +115,16 @@ def main(args):
     r = SoukMkidReadout('localhost', fpgfile=args.fpgfile, local=True)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     acc = r.accumulators[ACCNUM]
+    acc_len = acc.get_acc_len()
+    n_chans = acc.n_chans
+    fpga_clk = r.fpga.get_fpga_clock()
+    r.adc_clk_hz = fpga_clk * 8 # HACK
+    acc_time_ms = 1000* acc_len * acc._n_serial_chans / r.fpga.get_fpga_clock()
+    print(f'Accumulation time is approximately {acc_time_ms:.1f} milliseconds')
+    freqs_hz = np.zeros(n_chans)
+    phase_offsets = np.zeros(n_chans, dtype='<i4')
     addrs, nbytes = get_bram_addresses(acc)
+    mixer_addrs, mixer_nbytes = get_bram_addresses_mixer(r.mixer)
     acc._wait_for_acc(0.00005)
     t0 = time.time()
     ip = None
@@ -110,6 +142,8 @@ def main(args):
                 sock.sendto(p, (ip, args.destport))
         if err:
             err_cnt += 1
+        if args.update_los:
+            fast_write_mixer(r.mixer, phase_offsets, mixer_addrs, mixer_nbytes)
         tt1 = time.time()
         times += [tt1 - tt0]
         loop_cnt += 1
@@ -146,6 +180,9 @@ if __name__ == '__main__':
 
     parser.add_argument("--destport", type=int, default=DESTPORT,
         help = "Default destination UDP port",
+    )
+    parser.add_argument("--update-los", action='store_true',
+        help = "If set, update all LOs in the system on each accumulation",
     )
 
     args = parser.parse_args()
