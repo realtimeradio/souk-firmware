@@ -131,6 +131,7 @@ def main(args):
     err_cnt = 0
     loop_cnt = 0
     times = []
+    tlast = None
     while True:
         if args.wait_for_ip:
             ip = wait_non_zero_ip(acc)
@@ -140,7 +141,7 @@ def main(args):
         if ip is not None:
             for p in format_packets(t, d, error=err):
                 sock.sendto(p, (ip, args.destport))
-        if err:
+        if err or (tlast is not None and tlast != t-1):
             err_cnt += 1
         if args.update_los:
             fast_write_mixer(r.mixer, phase_offsets, mixer_addrs, mixer_nbytes)
@@ -149,6 +150,7 @@ def main(args):
         loop_cnt += 1
         if loop_cnt == args.nloop:
             break
+        tlast = t
     t1 = time.time()
     avg_read_ms = np.mean(times)*1000
     max_read_ms = np.max(times)*1000
