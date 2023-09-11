@@ -1,3 +1,4 @@
+from os import path
 import logging
 import yaml
 import numpy as np
@@ -181,8 +182,9 @@ class SoukMkidReadout():
         if self.fpgfile is None:
             self.logger.exception("Couldn't figure out what .fpg to program")
             raise RuntimeError
-        self.logger.info(f"Programming with {self.fpgfile}")
-        self._cfpga.upload_to_ram_and_program(self.fpgfile)
+        realpath = path.realpath(self.fpgfile)
+        self.logger.info(f"Programming with {realpath}")
+        self._cfpga.upload_to_ram_and_program(realpath)
         self._initialize_blocks()
 
     def _initialize_blocks(self, ignore_unsupported=False):
