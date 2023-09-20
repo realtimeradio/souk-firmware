@@ -9,6 +9,9 @@ git submodule update --init casperfpga
 # Get non-standard header dependencies
 sudo apt install libjpeg-dev
 
+# Install the python wheel package, needed to install other packages
+pip install wheel
+
 # install casperfpga
 cd casperfpga
 pip install -r requirements.txt
