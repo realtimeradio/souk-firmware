@@ -107,7 +107,7 @@ class Accumulator(Block):
                 dout[i::self._n_parallel_chans].real = d[0::2]
                 dout[i::self._n_parallel_chans].imag = d[1::2]
             else:
-                dout[i::self._n_parallel_chans].imag = d[:]
+                dout[i::self._n_parallel_chans].real = d[:]
         stop_acc_cnt = self.get_acc_cnt()
         if start_acc_cnt != stop_acc_cnt:
             self.logger.warning('Accumulation counter changed while reading data!')

@@ -34,6 +34,17 @@ N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
 N_RX_FFT = N_RX_OVERSAMPLE*2048 # Number of FFT points in RX channelizer 
 N_TX_FFT = 2048 # Number of FFT points in TX synthesizer (not including oversampling)
 
+FW_TYPE_PARAMS = {
+        10: {
+            'n_chan_rx': 2**16,
+            'rx_only': True,
+            },
+        'defaults': {
+            'n_chan_rx': N_RX_FFT,
+            'rx_only': False,
+            },
+        }
+
 class SoukMkidReadout():
     """
     A control class for SOUK MKID Readout firmware on a single board
@@ -68,6 +79,7 @@ class SoukMkidReadout():
         self.config = {}
         self.adc_clk_hz = None
         self.pipeline_id = pipeline_id
+        self.fw_params = None
         #: CasperFpga transport class
         if local:
             transport = casperfpga.LocalMemTransport
@@ -203,6 +215,15 @@ class SoukMkidReadout():
             self.logger.error('Firmware not supported. Try reprogramming with self.program()')
             if not ignore_unsupported:
                 raise RuntimeError
+        fw_type = self.fpga.get_firmware_type()
+        try:
+            self.fw_params = FW_TYPE_PARAMS[fw_type]
+        except KeyError:
+            try:
+                self.fw_params = FW_TYPE_PARAMS['defaults']
+            except KeyError:
+                self.logger.error('No default firmware parameters available!')
+                raise
         #: Control interface to RFDC block
         self.rfdc        = rfdc.Rfdc(self._cfpga, 'rfdc',
                                lmkfile=self.config.get('lmkfile', None),
@@ -224,7 +245,7 @@ class SoukMkidReadout():
         #self.mask        = mask.Mask(self._cfpga, 'mask')
         #: Control interface to Autocorrelation block
         self.autocorr    = autocorr.AutoCorr(self._cfpga, f'{prefix}autocorr',
-                               n_chans=N_RX_FFT,
+                               n_chans=self.fw_params['n_chan_rx'],
                                n_signals=1,
                                n_parallel_streams=16,
                                n_cores=1,
@@ -235,20 +256,21 @@ class SoukMkidReadout():
         #: Control interface to post-PFB Test Vector Generator block
         self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, f'{prefix}pfbtvg',
                                 n_inputs=1,
-                                n_chans=N_RX_FFT,
+                                n_chans=self.fw_params['n_chan_rx'],
                                 n_serial_inputs=1,
                                 n_rams=4,
                                 n_samples_per_word=4,
                                 sample_format='h',
                             )
         #: Control interface to Channel Reorder block
-        self.chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}chan_select',
-                                n_chans_in=N_RX_FFT,
-                                n_chans_out=N_TONE,
-                                n_parallel_chans_in=16,
-                                parallel_first=True,
-                                support_zeroing=True,
-                            )
+        if not self.fw_params['rx_only']:
+            self.chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}chan_select',
+                                    n_chans_in=self.fw_params['n_chan_rx'],
+                                    n_chans_out=N_TONE,
+                                    n_parallel_chans_in=16,
+                                    parallel_first=True,
+                                    support_zeroing=True,
+                                )
         #: Control interface to Zoom FFT
         self.zoomfft      = zoom_pfb.ZoomPfb(self._cfpga, f'{prefix}zoom_fft',
                                fftshift=0xffffffff
@@ -269,50 +291,52 @@ class SoukMkidReadout():
                                 phase_offset_bp=31,
                                 n_scale_bits=12,
                             )
-        #: Control interface to Accumulator Blocks
-        self.accumulators   =  []
-        self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc0',
-                                    n_chans=N_TONE,
-                                    n_parallel_chans=8,
-                                    dtype='>i4',
-                                    is_complex=True,
-                                    has_dest_ip=True,
-                                    window_n_points=2**11,
-                                )
-                               ]
-        self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc1',
-                                    n_chans=N_TONE,
-                                    n_parallel_chans=8,
-                                    dtype='>i4',
-                                    is_complex=True,
-                                    has_dest_ip=True,
-                                    window_n_points=2**11,
-                                )
-                               ]
+        if not self.fw_params['rx_only']:
+            #: Control interface to Accumulator Blocks
+            self.accumulators   =  []
+            self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc0',
+                                        n_chans=N_TONE,
+                                        n_parallel_chans=8,
+                                        dtype='>i4',
+                                        is_complex=True,
+                                        has_dest_ip=True,
+                                        window_n_points=2**11,
+                                    )
+                                   ]
+            self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc1',
+                                        n_chans=N_TONE,
+                                        n_parallel_chans=8,
+                                        dtype='>i4',
+                                        is_complex=True,
+                                        has_dest_ip=True,
+                                        window_n_points=2**11,
+                                    )
+                                   ]
         #: Control interface to CORDIC generators
         self.gen_cordic    = generator.Generator(self._cfpga, f'{prefix}cordic_gen')
         #: Control interface to LUT generators
         self.gen_lut       = generator.Generator(self._cfpga, f'{prefix}lut_gen')
-        #: Control interface to Pre-Polyphase Synthesizer Reorder
-        self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_input_reorder',
-                                n_chans_in=N_TONE,
-                                n_chans_out=N_TX_FFT,
-                                n_parallel_chans_in=8,
-                                parallel_first=False,
-                                support_zeroing=True,
-                            )
-        #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
-        self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_offset_input_reorder',
-                                n_chans_in=N_TONE,
-                                n_chans_out=N_TX_FFT,
-                                n_parallel_chans_in=8,
-                                parallel_first=False,
-                                support_zeroing=True,
-                            )
-        #: Control interface to Polyphase Synthesizer block
-        self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
-        #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
-        self.psboffset     = pfb.Pfb(self._cfpga, f'{prefix}psboffset', fftshift=0b111)
+        if not self.fw_params['rx_only']:
+            #: Control interface to Pre-Polyphase Synthesizer Reorder
+            self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_input_reorder',
+                                    n_chans_in=N_TONE,
+                                    n_chans_out=N_TX_FFT,
+                                    n_parallel_chans_in=8,
+                                    parallel_first=False,
+                                    support_zeroing=True,
+                                )
+            #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
+            self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_offset_input_reorder',
+                                    n_chans_in=N_TONE,
+                                    n_chans_out=N_TX_FFT,
+                                    n_parallel_chans_in=8,
+                                    parallel_first=False,
+                                    support_zeroing=True,
+                                )
+            #: Control interface to Polyphase Synthesizer block
+            self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
+            #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
+            self.psboffset     = pfb.Pfb(self._cfpga, f'{prefix}psboffset', fftshift=0b111)
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, f'{prefix}output')
         ##: Control interface to Packetizer block
@@ -328,31 +352,28 @@ class SoukMkidReadout():
         # order they appear here
 
         #: Dictionary of all control blocks in the firmware system.
-        self.blocks = {
-            'fpga'      : self.fpga,
-            'rfdc'      : self.rfdc,
-            'sync'      : self.sync,
-            'input'     : self.input,
-            'pfb'       : self.pfb,
-            'pfbtvg'     : self.pfbtvg,
-            'chanselect' : self.chanselect,
-            'zoomfft'    : self.zoomfft,
-            'zoomacc'    : self.zoomacc,
-            'mixer'      : self.mixer,
-            'psb_chanselect' : self.psb_chanselect,
-            'psb_offset_chanselect' : self.psb_offset_chanselect,
-            'psb'        : self.psb,
-            'psboffset'  : self.psboffset,
-            #'packetizer': self.packetizer,
-            #'eth'       : self.eth,
-            'autocorr'     : self.autocorr,
-            'accumulator0' : self.accumulators[0],
-            'accumulator1' : self.accumulators[1],
-            'output'       : self.output,
-            'gen_cordic'   : self.gen_cordic,
-            'gen_lut'      : self.gen_lut,
-            #'powermon'  : self.powermon,
-        }
+        self.blocks = {}
+        self.blocks['fpga'       ] =  self.fpga
+        self.blocks['rfdc'       ] =  self.rfdc
+        self.blocks['sync'       ] =  self.sync
+        self.blocks['input'      ] =  self.input
+        self.blocks['pfb'        ] =  self.pfb
+        self.blocks['pfbtvg'     ] =  self.pfbtvg
+        self.blocks['autocorr'     ] =  self.autocorr
+        self.blocks['output'       ] =  self.output
+        self.blocks['gen_cordic'   ] =  self.gen_cordic
+        self.blocks['gen_lut'      ] =  self.gen_lut
+        self.blocks['zoomfft'    ] =  self.zoomfft
+        self.blocks['zoomacc'    ] =  self.zoomacc
+        if not self.fw_params['rx_only']:
+            self.blocks['chanselect' ] =  self.chanselect
+            self.blocks['mixer'      ] =  self.mixer
+            self.blocks['psb_chanselect' ] =  self.psb_chanselect
+            self.blocks['psb_offset_chanselect' ] =  self.psb_offset_chanselect
+            self.blocks['psb'        ] =  self.psb
+            self.blocks['psboffset'  ] =  self.psboffset
+            self.blocks['accumulator0' ] =  self.accumulators[0]
+            self.blocks['accumulator1' ] =  self.accumulators[1]
 
     def initialize(self, read_only=False):
         """
@@ -397,7 +418,7 @@ class SoukMkidReadout():
         :rtype: (int, float)
         """
         # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
-        rx_bin_centers_hz = np.fft.fftfreq(N_RX_FFT, 1./self.adc_clk_hz)
+        rx_bin_centers_hz = np.fft.fftfreq(self.fw_params['n_chan'], 1./self.adc_clk_hz)
         rx_bin_centers_hz += self.adc_clk_hz/2. # account for upstream mixing
         # Distance of freq_hz from each bin center
         rx_freq_bins_offset_hz = freq_hz - rx_bin_centers_hz

@@ -83,7 +83,7 @@ class Pfb(Block):
         if stats['overflow_count'] != 0:
             flags['overflow_count'] = FENG_WARNING
         fftshift = self.get_fftshift()
-        # stats['fftshift'] = '0b%s' % np.binary_repr(fftshift, width=self.STAGES)
+        stats['fftshift'] = '0b%s' % np.binary_repr(fftshift, width=16)
         return stats, flags
 
     def initialize(self, read_only=False):

@@ -34,7 +34,7 @@ class ZoomPfb(Pfb):
         :rtype: int
 
         """
-        self.read_uint('chan_sel')
+        return self.read_uint('chan_sel')
 
     def get_status(self):
         """
