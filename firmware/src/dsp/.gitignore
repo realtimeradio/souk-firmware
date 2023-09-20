@@ -4,10 +4,14 @@ cordic_8x/*
 !cordic_8x/*.dcp
 ospfb_2x_4096c_8i_16o/*
 !ospfb_2x_4096c_8i_16o/*.dcp
+ospfb_2x_64kc_8i_16o/*
+!ospfb_2x_64kc_8i_16o/*.dcp
 nospfb_2x_4096c_8i_16o/*
 !nospfb_2x_4096c_8i_16o/*.dcp
 zoom_fft_1024c/*
 !zoom_fft_1024c/*.dcp
+zoom_fft_1024c_d4096/*
+!zoom_fft_1024c_d4096/*.dcp
 polyphase_synth/*
 !polyphase_synth/*.dcp
 cordic_1x/*
