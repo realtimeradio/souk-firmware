@@ -224,7 +224,25 @@ class AutoCorr(Block):
         else:
             return spec
 
-    def plot_all_spectra(self, db=True, show=True, filter_ksize=None, adc_srate_hz=None):
+    def get_freqs(self, adc_srate_hz, lo_hz=0.0):
+        """
+        Get the center frequencies of each spectral channel.
+
+        :param adc_srate_hz: ADC sample rate in Hz.
+        :type adc_srate_hz: float
+
+        :param lo_hz: LO frequency, in Hz, implemented within the ADC.
+        :type lo_hz: float
+        """
+        raw_freqs = np.fft.fftfreq(self.n_chans, d=1./adc_srate_hz)
+        #TODO: this flipping convention seems wrong, but empirically works. Figure out.
+        if lo_hz < 0:
+            freqs = raw_freqs - lo_hz
+        else:
+            freqs = raw_freqs[::-1] + lo_hz
+        return freqs
+
+    def plot_all_spectra(self, db=True, show=True, filter_ksize=None, adc_srate_hz=None, lo_hz=0.0):
         """
         Plot the spectra of all signals,
         with accumulation length divided out
@@ -242,6 +260,9 @@ class AutoCorr(Block):
         :param adc_srate_hz: ADC sample rate in Hz. If provided, plot with an appropriate
             frequency scale on the X-axis.
         :type adc_srate_hz: float
+
+        :param lo_hz: LO frequency, in Hz, implemented within the ADC.
+        :type lo_hz: float
 
         :return: matplotlib.Figure
 
@@ -262,7 +283,7 @@ class AutoCorr(Block):
         else:
             ax.set_ylabel('Power [linear]')
         if adc_srate_hz is not None:
-            freqs = np.fft.fftfreq(self.n_chans, d=1./adc_srate_hz) / 1e6 # in MHz
+            freqs = self.get_freqs(adc_srate_hz, lo_hz) / 1e6 # in MHz
         for speci, spec in enumerate(specs):
             if adc_srate_hz is not None:
                 ax.plot(np.fft.fftshift(freqs), np.fft.fftshift(spec),
@@ -277,7 +298,7 @@ class AutoCorr(Block):
             plt.show()
         return f
 
-    def plot_spectra(self, signal_block=0, db=True, show=True, filter_ksize=None, adc_srate_hz=None):
+    def plot_spectra(self, signal_block=0, db=True, show=True, filter_ksize=None, adc_srate_hz=None, lo_hz=0.0):
         """
         Plot the spectra of all signals in a single signal_block,
         with accumulation length divided out
@@ -305,6 +326,9 @@ class AutoCorr(Block):
             frequency scale on the X-axis.
         :type adc_srate_hz: float
 
+        :param lo_hz: LO frequency, in Hz, implemented within the ADC.
+        :type lo_hz: float
+
         :return: matplotlib.Figure
 
         """
@@ -322,7 +346,7 @@ class AutoCorr(Block):
         else:
             channel_offset = 0
         if adc_srate_hz is not None:
-            freqs = np.fft.fftfreq(self.n_chans, d=1./adc_srate_hz) / 1e6 # MHz
+            freqs = self.get_freqs(adc_srate_hz, lo_hz) / 1e6 # in MHz
         for speci, spec in enumerate(specs):
             if adc_srate_hz is not None:
                 ax.plot(np.fft.fftshift(freqs), np.fft.fftshift(spec),
