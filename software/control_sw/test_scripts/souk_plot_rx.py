@@ -7,11 +7,13 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 ADC_ID = 1 # ADC with a small LO shift to maintain low-end of band
-DEFAULT_CONFIGFILE = '/home/leechj/souk-firmware/software/control_sw/config/souk-single-pipeline-rx.yaml'
-DEFAULT_HOST = '10.11.11.11'
 ZOOM_ACC_LEN = 128
 ZOOM_FFT_SHIFT = 0b110110110110
 FFT_SHIFT = 0xefef
+DEFAULT_CONFIGFILE = '/home/leechj/souk-firmware/software/control_sw/config/souk-single-pipeline-rx.yaml'
+DEFAULT_HOST = '10.11.11.11'
+DEFAULT_COARSE_ACC_LEN = 2**15
+DEFAULT_FINE_ACC_LEN = 128
 
 def main(args):
     from souk_mkid_readout import SoukMkidReadout
@@ -22,8 +24,15 @@ def main(args):
         r.initialize()
         r.pfb.set_fftshift(FFT_SHIFT)
         r.zoomfft.set_fftshift(ZOOM_FFT_SHIFT)
-        r.sync.arm_sync(wait=False)
-        r.sync.sw_sync()
+
+    ct = args.coarse_acc_len * r.autocorr.n_chans / 2. / r.adc_clk_hz # divide-by-2 because oversampled
+    ft = args.fine_acc_len * r.zoomacc.n_chans * r.autocorr.n_chans / 2. / r.adc_clk_hz
+    print("Accumulating %d coarse spectra (%.2f s)" % (args.coarse_acc_len, ct))
+    print("Accumulating %d fine spectra (%.2f s)" % (args.fine_acc_len, ft))
+    r.autocorr.set_acc_len(args.coarse_acc_len)
+    r.zoomacc.set_acc_len(args.fine_acc_len)
+    r.sync.arm_sync(wait=False)
+    r.sync.sw_sync()
 
     r.fpga.write_int('adc_chan_sel', ADC_ID)
 
@@ -44,6 +53,7 @@ def main(args):
     else:
         plt.plot(np.fft.fftshift(freqs) / 1e6, np.fft.fftshift(d), '-o')
         plt.xlabel('Frequency [MHz]')
+    plt.ylabel('Power [dBFS]')
 
     if args.zoom_chan is not None:
         if args.zoom_chan < 0:
@@ -53,7 +63,7 @@ def main(args):
             zoom_chan = args.zoom_chan
         coarse_center = freqs[zoom_chan]
         print("Zooming on bin %d with center frequency %d Hz" % (zoom_chan, coarse_center))
-        freqs_fine = np.fft.fftfreq(1024, d=1./(r.adc_clk_hz/2.0**15)) + coarse_center
+        freqs_fine = np.fft.fftfreq(r.zoomacc.n_chans, d=1./(r.adc_clk_hz/(r.autocorr.n_chans/2.))) + coarse_center
         r.zoomfft.set_channel(zoom_chan)
         r.sync.arm_sync(wait=False)
         r.sync.sw_sync()
@@ -63,6 +73,7 @@ def main(args):
         plt.subplot(nplot, 1, 2)
         plt.plot(np.fft.fftshift(freqs_fine) / 1e6, np.fft.fftshift(dfine))
         plt.xlabel('Frequency [MHz]')
+        plt.ylabel('Power [dB arb ref.]')
 
     plt.show()
 
@@ -86,6 +97,14 @@ if __name__ == '__main__':
 
     parser.add_argument("-c", "--plot_chan", action="store_true",
         help = "If set, plot X-axis as channel index, not frequency",
+    )
+
+    parser.add_argument("--coarse_acc_len", type=int, default=DEFAULT_COARSE_ACC_LEN, 
+        help = "Number of coarse spectra to accumulate",
+    )
+
+    parser.add_argument("--fine_acc_len", type=int, default=DEFAULT_FINE_ACC_LEN, 
+        help = "Number of fine spectra to accumulate",
     )
 
     parser.add_argument("-z", "--zoom_chan", type=int, default=None,
