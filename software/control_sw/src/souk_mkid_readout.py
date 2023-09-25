@@ -126,6 +126,9 @@ class SoukMkidReadout():
             self.logger.exception(f"Failed to parse config file {f}")
             raise
         self.fpgfile = self.config.get('fpgfile', self.fpgfile)
+        # Allow fpgfile to be specified relative to config
+        if self.fpgfile.startswith('.'):
+            self.fpgfile = path.join(path.dirname(f), self.fpgfile)
         self.adc_clk_hz = self.config.get('adc_clk_hz', None)
         if self.fpgfile is not None:
             self.read_fpg(self.fpgfile)
