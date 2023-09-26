@@ -418,7 +418,7 @@ class SoukMkidReadout():
         :rtype: (int, float)
         """
         # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
-        rx_bin_centers_hz = np.fft.fftfreq(self.fw_params['n_chan'], 1./self.adc_clk_hz)
+        rx_bin_centers_hz = np.fft.fftfreq(self.fw_params['n_chan_rx'], 1./self.adc_clk_hz)
         rx_bin_centers_hz += self.adc_clk_hz/2. # account for upstream mixing
         # Distance of freq_hz from each bin center
         rx_freq_bins_offset_hz = freq_hz - rx_bin_centers_hz
