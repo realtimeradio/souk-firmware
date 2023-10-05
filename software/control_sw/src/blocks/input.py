@@ -21,71 +21,6 @@ class Input(Block):
         """
         super(Input, self).__init__(host, name, logger)
 
-    def _trigger_snapshot(self):
-        """
-        Send snapshot trigger.
-        """
-        self.change_reg_bits('adc_ss_ctrl', 0, self.ADC_SS_TRIG_OFFSET)
-        self.change_reg_bits('adc_ss_ctrl', 1, self.ADC_SS_TRIG_OFFSET)
-        self.change_reg_bits('adc_ss_ctrl', 0, self.ADC_SS_TRIG_OFFSET)
-
-    def get_adc_snapshot(self):
-        """
-        Get an ADC snapshot.
-
-        :return: numpy array of complex valued ADC samples
-        :rtype: numpy.ndarray
-        """
-
-        i_ss = self.host.snapshots[self.prefix + 'adc_ss_i']
-        q_ss = self.host.snapshots[self.prefix + 'adc_ss_q']
-        i_ss.arm()
-        q_ss.arm()
-        self._trigger_snapshot()
-        di, ti = i_ss.read_raw(arm=False)
-        dq, tq = q_ss.read_raw(arm=False)
-        i = np.frombuffer(di['data'], dtype=self.dtype)
-        q = np.frombuffer(dq['data'], dtype=self.dtype)
-        return i + 1j*q
-
-    def plot_adc_snapshot(self, nsamples=None):
-        """
-        Plot an ADC snapshot.
-
-        :param nsamples: If provided, only plot this many samples
-        :type nsamples: int
-        """
-        from matplotlib import pyplot as plt
-        x = self.get_adc_snapshot()
-        if nsamples is not None:
-            x = x[0:nsamples]
-        plt.plot(x.real, label='I')
-        plt.plot(x.imag, label='Q')
-        plt.legend()
-        plt.ylabel('ADC counts')
-        plt.xlabel('Sample Number')
-        plt.show()
-
-    def plot_adc_spectrum(self, db=False):
-        """
-        Plot a power spectrum of the ADC input stream using a simple FFT.
-
-        :param db: If True, plot in dBs, else linear.
-        :type db: bool
-        """
-        from matplotlib import pyplot as plt
-        x = self.get_adc_snapshot()
-        X = np.abs(np.fft.fft(x))**2
-        if db:
-            X = 10*np.log10(X)
-        plt.plot(np.fft.fftshift(X))
-        plt.xlabel('FFT bin (DC-centered)')
-        if db:
-            plt.ylabel('Power (dB; Arbitrary Reference)')
-        else:
-            plt.ylabel('Power (Linear, Arbitrary Reference)')
-        plt.show()
-
     def enable_loopback(self):
         """
         Set pipeline to internally loop-back DAC stream into ADC.
@@ -139,5 +74,4 @@ class Input(Block):
         """
         if read_only:
             return
-        self.write_int('adc_ss_ctrl', 0)
         self.disable_loopback()

@@ -9,10 +9,9 @@ from . import __version__
 from .error_levels import *
 from .blocks import fpga
 from .blocks import rfdc
+from .blocks import adc_snapshot
 from .blocks import sync
-#from .blocks import noisegen
 from .blocks import input
-#from .blocks import delay
 from .blocks import pfb
 from .blocks import zoom_pfb
 #from .blocks import mask
@@ -24,6 +23,7 @@ from .blocks import mixer
 from .blocks import accumulator
 from .blocks import generator
 from .blocks import output
+from .blocks import common
 #from .blocks import packetizer
 #from .blocks import eth
 #from .blocks import corr
@@ -31,8 +31,8 @@ from .blocks import output
 
 N_TONE = 2048 # Number of independent tones the design can generate
 N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
-N_RX_FFT = N_RX_OVERSAMPLE*2048 # Number of FFT points in RX channelizer 
-N_TX_FFT = 2048 # Number of FFT points in TX synthesizer (not including oversampling)
+N_RX_FFT = N_RX_OVERSAMPLE*4096 # Number of FFT points in RX channelizer 
+N_TX_FFT = 4096 # Number of FFT points in TX synthesizer (not including oversampling)
 
 FW_TYPE_PARAMS = {
         10: {
@@ -224,6 +224,8 @@ class SoukMkidReadout():
             except KeyError:
                 self.logger.error('No default firmware parameters available!')
                 raise
+        #: Common block shared with other pipelines
+        self.common      = common.Common(self._cfpga, 'common')
         #: Control interface to RFDC block
         self.rfdc        = rfdc.Rfdc(self._cfpga, 'rfdc',
                                lmkfile=self.config.get('lmkfile', None),
@@ -231,12 +233,11 @@ class SoukMkidReadout():
                            )
         #: Control interface to Synchronization / Timing block
         self.sync        = sync.Sync(self._cfpga, f'{prefix}sync')
-        ##: Control interface to Noise Generation block
-        #self.noise       = noisegen.NoiseGen(self._cfpga, 'noise', n_noise=2, n_outputs=64)
         #: Control interface to Input Multiplex block
         self.input       = input.Input(self._cfpga, f'{prefix}input')
-        ##: Control interface to Coarse Delay block
-        #self.delay       = delay.Delay(self._cfpga, 'delay', n_streams=64)
+        #: Control interface to ADC Snapshot block
+        self.adc_snapshot = adc_snapshot.AdcSnapshot(self._cfpga, f'common_adc_ss')
+
         #: Control interface to PFB block
         self.pfb         = pfb.Pfb(self._cfpga, f'{prefix}pfb',
                                fftshift=self.config.get('fftshift', 0xffffffff),
@@ -244,7 +245,7 @@ class SoukMkidReadout():
         ##: Control interface to Mask (flagging) block
         #self.mask        = mask.Mask(self._cfpga, 'mask')
         #: Control interface to Autocorrelation block
-        self.autocorr    = autocorr.AutoCorr(self._cfpga, f'{prefix}autocorr',
+        self.autocorr    = autocorr.AutoCorr(self._cfpga, f'common_autocorr',
                                n_chans=self.fw_params['n_chan_rx'],
                                n_signals=1,
                                n_parallel_streams=16,
@@ -258,7 +259,7 @@ class SoukMkidReadout():
                                 n_inputs=1,
                                 n_chans=self.fw_params['n_chan_rx'],
                                 n_serial_inputs=1,
-                                n_rams=4,
+                                n_rams=0,
                                 n_samples_per_word=4,
                                 sample_format='h',
                             )
@@ -272,11 +273,11 @@ class SoukMkidReadout():
                                     support_zeroing=True,
                                 )
         #: Control interface to Zoom FFT
-        self.zoomfft      = zoom_pfb.ZoomPfb(self._cfpga, f'{prefix}zoom_fft',
+        self.zoomfft      = zoom_pfb.ZoomPfb(self._cfpga, f'common_zoom_fft',
                                fftshift=0xffffffff
                             )
         #: Control interface to Zoom FFT Power Accumulator
-        self.zoomacc      = accumulator.Accumulator(self._cfpga, f'{prefix}zoom_acc',
+        self.zoomacc      = accumulator.Accumulator(self._cfpga, f'common_zoom_acc',
                                     n_chans=1024,
                                     n_parallel_chans=1,
                                     dtype='>u8',
@@ -313,9 +314,9 @@ class SoukMkidReadout():
                                     )
                                    ]
         #: Control interface to CORDIC generators
-        self.gen_cordic    = generator.Generator(self._cfpga, f'{prefix}cordic_gen')
+        self.gen_cordic    = generator.Generator(self._cfpga, f'common_cordic_gen')
         #: Control interface to LUT generators
-        self.gen_lut       = generator.Generator(self._cfpga, f'{prefix}lut_gen')
+        self.gen_lut       = generator.Generator(self._cfpga, f'common_lut_gen')
         if not self.fw_params['rx_only']:
             #: Control interface to Pre-Polyphase Synthesizer Reorder
             self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_input_reorder',

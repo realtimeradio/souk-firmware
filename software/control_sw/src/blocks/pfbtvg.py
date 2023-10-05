@@ -23,7 +23,8 @@ class PfbTvg(Block):
     :param n_serial_inputs: Number of independent inputs sharing a data bus
     :type n_serial_inputs: int
 
-    :param n_rams: Number of independent bram blocks per input
+    :param n_rams: Number of independent bram blocks per input. If 0, block
+       has no RAMs, and just contains counter-based test vectors.
     :type n_rams: int
 
     :param n_samples_per_word: Number of complex samples per word in RAM
@@ -83,6 +84,8 @@ class PfbTvg(Block):
         :type test_vector: list or numpy.ndarray
 
         """
+        if self._n_rams == 0:
+            raise NotImplementedError('Test vector brams not available in this firmware!')
         tvr = np.array([x.real for x in test_vector], dtype='>%s'%self._format)
         tvi = np.array([x.imag for x in test_vector], dtype='>%s'%self._format)
         assert (tvr.shape[0] == self.n_chans), "Test vector should have self.n_chans elements!"
@@ -131,6 +134,10 @@ class PfbTvg(Block):
         :rtype: numpy.ndarray
 
         """
+        if self._n_rams == 0:
+            # The test vector is always a counter since there is no RAM,
+            # so simply return that.
+            return 1j*np.arange(self.n_chans)
         core_name = '%d' % (input // self._n_serial_inputs)
         sub_index = input % self._n_serial_inputs
         offset = sub_index * self._input_size // self._n_rams
@@ -148,7 +155,7 @@ class PfbTvg(Block):
                 for s in range(self._n_samples_per_word):
                     i = self._n_samples_per_word * self._n_rams * w + \
                         self._n_samples_per_word * r + s
-                    out[i] = dr[j] + di[j]
+                    out[i] = dr[j] + 1j*di[j]
                     j += 1
         return out
 
@@ -187,4 +194,5 @@ class PfbTvg(Block):
             pass
         else:
             self.tvg_disable()
-            self.write_freq_ramp()
+            if self._n_rams > 0:
+                self.write_freq_ramp()
