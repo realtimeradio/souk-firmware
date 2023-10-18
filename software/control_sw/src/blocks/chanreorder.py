@@ -57,7 +57,9 @@ class ChanReorder(Block):
         self._n_parallel_chans_in = n_parallel_chans_in
         self._n_serial_chans_in = n_chans_in // n_parallel_chans_in
         # These asserts probably don't catch all configuration issues
-        assert n_chans_in % n_chans_out == 0
+        if not n_chans_in % n_chans_out == 0:
+            self.logger.error(f'n_chans_in ({n_chans_in}) not divisible by n_chans_out ({n_chans_out})')
+            raise ValueError
         self._inout_ratio = n_chans_in // n_chans_out
         assert n_parallel_chans_in % self._inout_ratio == 0
         # If reordering parallel first, the reorder is completed with the
@@ -267,6 +269,135 @@ class ChanReorder(Block):
                 chan_order = np.ones(self.n_chans_out) * -1 # Disable everything
             else:
                 chan_order = np.arange(0, self.n_chans_in, 2) # output every other channel
+            self.set_channel_outmap(chan_order)
+
+class ChanReorderMultiSample(ChanReorder):
+    """
+    Instantiate a control interface for a Channel Reorder block.
+
+    :param host: CasperFpga interface for host.
+    :type host: casperfpga.CasperFpga
+
+    :param name: Name of block in Simulink hierarchy.
+    :type name: str
+
+    :param logger: Logger instance to which log messages should be emitted.
+    :type logger: logging.Logger
+
+    :param n_serial_chans_in: Number of serial channels input to the reorder
+    :type n_serial_chans_in: int
+
+    :param n_parallel_chans_in: Number of parallel channels input to the reorder
+    :type n_parallel_chans_in: int
+
+    :param n_parallel_samples: Number of parallel samples output
+    :type n_parallel_samples: int
+
+    :param support_zeroing: If True, allow the use of channel index ``-1`` to mean
+        "zero out this channel"
+    :type support_zeroing: bool
+    """
+    _pmap_format = '>i4'
+    _map_format = '>i4'
+    def __init__(self, host, name,
+            n_serial_chans_in=2**9,
+            n_parallel_chans_in=2**4,
+            n_parallel_samples=2**2,
+            support_zeroing=True,
+            logger=None):
+        super(ChanReorder, self).__init__(host, name, logger)
+        self.n_chans_in = n_serial_chans_in * n_parallel_chans_in
+        self.n_serial_chans_in = n_serial_chans_in
+        self.n_parallel_chans_in = n_parallel_chans_in
+        self.n_parallel_samples = n_parallel_samples
+        assert n_parallel_chans_in % n_parallel_samples == 0
+        self._reduction_factor = n_parallel_chans_in // n_parallel_samples
+        self._reorder_depth = self.n_chans_in * self._reduction_factor
+
+    def set_channel_outmap(self, outmap):
+        """
+        Remap the channels such that the channel outmap[i]
+        emerges out of the reorder map in position i.
+
+        The provided map must be `self.n_chans_out` elements long, else
+        `ValueError` is raised
+
+        :param outmap: The outmap to which data should be mapped. I.e., if
+            `outmap[0] = 16`, then the first channel out of the reorder block
+            will be channel 16. 
+        :type outmap: list of int
+
+        """
+        serial_map = np.zeros([self._reorder_depth], dtype=self._map_format)
+        parallel_map = (self._reduction_factor + 1) * np.ones([self._reorder_depth], dtype=self._pmap_format)
+
+        outmap = np.array(outmap, dtype=int)
+
+        serial_map[0:len(outmap)-1] = outmap // self._reduction_factor
+        parallel_map[0:len(outmap)-1] = outmap % self._reduction_factor
+        parallel_map[outmap == -1] = self._reduction_factor + 1
+
+        self.write(f'map0_{self._map_reg}', serial_map.tobytes())
+        self.write('pmap', parallel_map.tobytes())
+
+    def get_channel_outmap(self):
+        """
+        Read the currently loaded reorder map.
+
+        :return: The reorder map currently loaded. Entry `i` in this map is the
+            channel number which emerges in the `i`th output position.
+        :rtype: list
+        """
+
+        nbytes = self._reorder_depth * np.dtype(self._map_format).itemsize
+        serial_map = np.frombuffer(self.read(f'map0_{self._map_reg}', nbytes), dtype=self._map_format)
+        nbytes = self._reorder_depth * np.dtype(self._pmap_format).itemsize
+        parallel_map = np.frombuffer(self.read('pmap', nbytes), dtype=self._pmap_format)
+        outmap = serial_map * self._reduction_factor + parallel_map
+        outmap[parallel_map == self._reduction_factor + 1] = -1
+        return outmap
+
+    def set_single_channel(self, outidx, inidx):
+        """
+        Set output channel number ``outidx`` to input number ``inidx``.
+        Do this by reading the total channel map, modifying a single entry,
+        and writing back.
+
+        Example usage:
+            # Set the first channel out of the reorder to 33
+            ```set_single_channel(0, 33)``
+
+        :param outidx: Index of output channel to set.
+        :type outidx: int
+
+        :param inidx: Input channel index to select.
+        :type inidx: int
+        """
+        self.logger.info(f'Setting output {outidx} to channel {inidx}')
+        assert np.dtype(self._map_format).itemsize == 4
+        assert np.dtype(self._pmap_format).itemsize == 4
+        if inidx == -1:
+            inidx = self._reduction_factor + 1
+        self.write_int(f'map0_{self._map_reg}', inidx // self._reduction_factor, word_offset=outidx)
+        self.write_int('pmap', inidx % self._reduction_factor, word_offset=outidx)
+        
+
+    def initialize(self, read_only=False):
+        """
+        Initialize the block.
+
+        :param read_only: If True, this method is a no-op. If False,
+            initialize the block with the identity map. I.e., map channel
+            `n` to channel `n`.
+        :type read_only: bool
+        """
+        if read_only:
+            pass
+        else:
+            if self.support_zeroing:
+                chan_order = np.ones(self._reorder_depth) * -1 # Disable everything
+            else:
+                chan_order = np.arange(0, self.n_chans_in, self._reduction_factor) # output every Nth channel
             self.set_channel_outmap(chan_order)
 
 class ChanReorderPS(ChanReorder):

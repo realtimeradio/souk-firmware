@@ -265,11 +265,10 @@ class SoukMkidReadout():
                             )
         #: Control interface to Channel Reorder block
         if not self.fw_params['rx_only']:
-            self.chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}chan_select',
-                                    n_chans_in=self.fw_params['n_chan_rx'],
-                                    n_chans_out=N_TONE,
-                                    n_parallel_chans_in=16,
-                                    parallel_first=True,
+            self.chanselect   = chanreorder.ChanReorderMultiSample(self._cfpga, f'{prefix}chan_select',
+                                    n_serial_chans_in=self.fw_params['n_chan_rx'] // 2**4,
+                                    n_parallel_chans_in = 2**4,
+                                    n_parallel_samples=2**2,
                                     support_zeroing=True,
                                 )
         #: Control interface to Zoom FFT
@@ -318,22 +317,22 @@ class SoukMkidReadout():
         #: Control interface to LUT generators
         self.gen_lut       = generator.Generator(self._cfpga, f'common_lut_gen')
         if not self.fw_params['rx_only']:
-            #: Control interface to Pre-Polyphase Synthesizer Reorder
-            self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_input_reorder',
-                                    n_chans_in=N_TONE,
-                                    n_chans_out=N_TX_FFT,
-                                    n_parallel_chans_in=8,
-                                    parallel_first=False,
-                                    support_zeroing=True,
-                                )
-            #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
-            self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_offset_input_reorder',
-                                    n_chans_in=N_TONE,
-                                    n_chans_out=N_TX_FFT,
-                                    n_parallel_chans_in=8,
-                                    parallel_first=False,
-                                    support_zeroing=True,
-                                )
+            ##: Control interface to Pre-Polyphase Synthesizer Reorder
+            #self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_input_reorder',
+            #                        n_chans_in=N_TONE,
+            #                        n_chans_out=N_TX_FFT,
+            #                        n_parallel_chans_in=8,
+            #                        parallel_first=False,
+            #                        support_zeroing=True,
+            #                    )
+            ##: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
+            #self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_offset_input_reorder',
+            #                        n_chans_in=N_TONE,
+            #                        n_chans_out=N_TX_FFT,
+            #                        n_parallel_chans_in=8,
+            #                        parallel_first=False,
+            #                        support_zeroing=True,
+            #                    )
             #: Control interface to Polyphase Synthesizer block
             self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
             #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
@@ -369,8 +368,8 @@ class SoukMkidReadout():
         if not self.fw_params['rx_only']:
             self.blocks['chanselect' ] =  self.chanselect
             self.blocks['mixer'      ] =  self.mixer
-            self.blocks['psb_chanselect' ] =  self.psb_chanselect
-            self.blocks['psb_offset_chanselect' ] =  self.psb_offset_chanselect
+            #self.blocks['psb_chanselect' ] =  self.psb_chanselect
+            #self.blocks['psb_offset_chanselect' ] =  self.psb_offset_chanselect
             self.blocks['psb'        ] =  self.psb
             self.blocks['psboffset'  ] =  self.psboffset
             self.blocks['accumulator0' ] =  self.accumulators[0]
