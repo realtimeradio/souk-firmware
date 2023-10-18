@@ -5,7 +5,7 @@ from souk_mkid_readout.error_levels import *
 
 class AdcSnapshot(Block):
     dtype = '>h'
-    ADC_SS_TRIG_OFFSET = 0
+    ADC_SS_TRIG_OFFSET = 1
     NBYTE = 16 * 2**9 # Number of bytes in each of I and Q buffers
     def __init__(self, host, name, logger=None):
         """
@@ -19,15 +19,15 @@ class AdcSnapshot(Block):
         :type logger: logging.Logger
 
         """
-        super(Input, self).__init__(host, name, logger)
+        super(AdcSnapshot, self).__init__(host, name, logger)
 
     def _trigger_snapshot(self):
         """
         Send snapshot trigger.
         """
-        self.change_reg_bits('adc_ss_ctrl', 0, self.ADC_SS_TRIG_OFFSET)
-        self.change_reg_bits('adc_ss_ctrl', 1, self.ADC_SS_TRIG_OFFSET)
-        self.change_reg_bits('adc_ss_ctrl', 0, self.ADC_SS_TRIG_OFFSET)
+        self.change_reg_bits('ctrl', 0, self.ADC_SS_TRIG_OFFSET)
+        self.change_reg_bits('ctrl', 1, self.ADC_SS_TRIG_OFFSET)
+        self.change_reg_bits('ctrl', 0, self.ADC_SS_TRIG_OFFSET)
 
     def _read_samples(self):
         """
