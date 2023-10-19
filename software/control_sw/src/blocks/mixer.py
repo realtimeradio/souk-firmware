@@ -161,11 +161,7 @@ class Mixer(Block):
             phase_scaled = phase[i] / np.pi # units of pi rads
             phase_scaled = ((phase_scaled + 1) % 2) - 1 # -pi to pi
             phase_scaled = int(phase_scaled * 2**self._phase_bp)
-            # set the MSB high
-            if phase_scaled >= 0:
-                phase_int[i] = (1<<31) + phase_scaled
-            else:
-                phase_int[i] = (1<<31) + (phase_scaled + (1<<31))
+            phase_int[i] = phase_scaled
             phase_offset_scaled = phase_offset[i] / np.pi # units of pi rads
             phase_offset_scaled = ((phase_offset_scaled + 1) % 2) - 1 # -pi to pi
             phase_offset_scaled = int(phase_offset_scaled * 2**self._phase_offset_bp)

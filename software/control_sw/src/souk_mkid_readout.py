@@ -279,6 +279,7 @@ class SoukMkidReadout():
         self.zoomacc      = accumulator.Accumulator(self._cfpga, f'common_zoom_acc',
                                     n_chans=1024,
                                     n_parallel_chans=1,
+                                    n_parallel_samples=4,
                                     dtype='>u8',
                                     is_complex=False,
                                     has_dest_ip=False,
@@ -286,7 +287,7 @@ class SoukMkidReadout():
         #: Control interface to Mixer block
         self.mixer        = mixer.Mixer(self._cfpga, f'{prefix}mix',
                                 n_chans=N_TONE,
-                                n_parallel_chans=8,
+                                n_parallel_chans=1,
                                 phase_bp=30,
                                 phase_offset_bp=31,
                                 n_scale_bits=12,
@@ -296,7 +297,8 @@ class SoukMkidReadout():
             self.accumulators   =  []
             self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc0',
                                         n_chans=N_TONE,
-                                        n_parallel_chans=8,
+                                        n_parallel_chans=1,
+                                        n_parallel_samples=4,
                                         dtype='>i4',
                                         is_complex=True,
                                         has_dest_ip=True,
@@ -305,7 +307,8 @@ class SoukMkidReadout():
                                    ]
             self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc1',
                                         n_chans=N_TONE,
-                                        n_parallel_chans=8,
+                                        n_parallel_chans=1,
+                                        n_parallel_samples=4,
                                         dtype='>i4',
                                         is_complex=True,
                                         has_dest_ip=True,
