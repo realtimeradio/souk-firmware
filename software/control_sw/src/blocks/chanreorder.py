@@ -314,6 +314,7 @@ class ChanReorderMultiSample(ChanReorder):
         self._reduction_factor = n_parallel_chans_in // n_parallel_samples
         self._reorder_depth = self.n_chans_in // self._reduction_factor
         self.support_zeroing = support_zeroing
+        self.n_chans_out = self._reorder_depth
 
     def set_channel_outmap(self, outmap):
         """
@@ -329,8 +330,8 @@ class ChanReorderMultiSample(ChanReorder):
         :type outmap: list of int
 
         """
-        serial_map = np.zeros(self._reorder_depth, dtype=self._map_format)
-        parallel_map = (self._reduction_factor + 1) * np.ones(self._reorder_depth, dtype=self._pmap_format)
+        serial_map = np.zeros(self._reorder_depth)
+        parallel_map = (self._reduction_factor + 1) * np.ones(self._reorder_depth)
 
         outmap = np.array(outmap, dtype=int)
 
@@ -338,8 +339,8 @@ class ChanReorderMultiSample(ChanReorder):
         parallel_map[0:len(outmap)] = outmap % self._reduction_factor
         parallel_map[outmap == -1] = self._reduction_factor + 1
 
-        self.write(f'map0_{self._map_reg}', serial_map.tobytes())
-        self.write('pmap', parallel_map.tobytes())
+        self.write(f'map0_{self._map_reg}', np.array(serial_map, dtype=self._map_format).tobytes())
+        self.write('pmap', np.array(parallel_map, dtype=self._pmap_format).tobytes())
 
     def get_channel_outmap(self):
         """
