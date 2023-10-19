@@ -118,6 +118,9 @@ class PfbTvg(Block):
         that is repeated for all ADC inputs. Data are wrapped to fit into
         8 bits. I.e., the test vector value for channel 257 takes the value ``1``.
         """
+        if self._n_rams == 0:
+            # These test vectors are already compiled into the firmware
+            return
         ramp = np.arange(self.n_chans)
         ramp = np.array(ramp, dtype='>%s' %self._format)
         for input in range(self.n_inputs):
