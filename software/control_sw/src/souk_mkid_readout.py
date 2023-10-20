@@ -338,8 +338,6 @@ class SoukMkidReadout():
             #                    )
             #: Control interface to Polyphase Synthesizer block
             self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
-            #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
-            self.psboffset     = pfb.Pfb(self._cfpga, f'{prefix}psboffset', fftshift=0b111)
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, f'{prefix}output')
         ##: Control interface to Packetizer block
@@ -374,7 +372,6 @@ class SoukMkidReadout():
             #self.blocks['psb_chanselect' ] =  self.psb_chanselect
             #self.blocks['psb_offset_chanselect' ] =  self.psb_offset_chanselect
             self.blocks['psb'        ] =  self.psb
-            self.blocks['psboffset'  ] =  self.psboffset
             self.blocks['accumulator0' ] =  self.accumulators[0]
             self.blocks['accumulator1' ] =  self.accumulators[1]
 
@@ -517,17 +514,13 @@ class SoukMkidReadout():
         :type check_overflow: bool
         """
         shift = 2**nshift - 1
-        for psb in [self.psb, self.psb_offset]:
-            psb.set_fftshift(shift)
+        self.psb.set_fftshift(shift)
         if not check_overflow:
             return
         psb_of = psb.get_overflow_count()
-        psboffset_of = psboffset.get_overflow_count()
         time.sleep(1)
         if not psb.get_overflow_count == psb_of:
             self.logger.warning('PSB appears to be overflowing. Check psb.get_status() for more info')
-        if not psboffset.get_overflow_count == psb_of:
-            self.logger.warning('Offset PSB appears to be overflowing. Check psboffset.get_status() for more info')
 
     def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0):
         """
