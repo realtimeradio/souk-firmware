@@ -311,7 +311,7 @@ class ChanReorderMultiSample(ChanReorder):
         self.n_parallel_chans_in = n_parallel_chans_in
         self.n_parallel_samples = n_parallel_samples
         assert n_parallel_chans_in % n_parallel_samples == 0
-        self._reduction_factor = n_parallel_chans_in // n_parallel_samples
+        self._reduction_factor = n_parallel_chans_in // n_parallel_samples # Number of parallel transpose blocks (see firmware!)
         self._reorder_depth = self.n_chans_in // self._reduction_factor
         self.support_zeroing = support_zeroing
         self.n_chans_out = self._reorder_depth
@@ -333,10 +333,20 @@ class ChanReorderMultiSample(ChanReorder):
         serial_map = np.zeros(self._reorder_depth)
         parallel_map = (self._reduction_factor + 1) * np.ones(self._reorder_depth)
 
+        nout = len(outmap)
+
+        block_id = np.zeros(nout)
+        block_s_offset = np.zeros(nout)
+        block_p_offset = np.zeros(nout)
+
         outmap = np.array(outmap, dtype=int)
 
-        serial_map[0:len(outmap)] = outmap // self._reduction_factor
-        parallel_map[0:len(outmap)] = outmap % self._reduction_factor
+        block_id[:] = outmap // self.n_parallel_chans_in
+        block_s_offset[:] = (outmap % self.n_parallel_chans_in) % self.n_parallel_samples
+        block_p_offset[:] = (outmap % self.n_parallel_chans_in) // self.n_parallel_samples
+
+        serial_map[0:nout] = (block_id * self.n_parallel_samples) + block_s_offset
+        parallel_map[0:nout] = block_p_offset
         parallel_map[outmap == -1] = self._reduction_factor + 1
 
         self.write(f'map0_{self._map_reg}', np.array(serial_map, dtype=self._map_format).tobytes())
@@ -355,7 +365,12 @@ class ChanReorderMultiSample(ChanReorder):
         serial_map = np.frombuffer(self.read(f'map0_{self._map_reg}', nbytes), dtype=self._map_format)
         nbytes = self._reorder_depth * np.dtype(self._pmap_format).itemsize
         parallel_map = np.frombuffer(self.read('pmap', nbytes), dtype=self._pmap_format)
-        outmap = serial_map * self._reduction_factor + parallel_map
+
+        block_id = serial_map // self.n_parallel_samples
+        block_s_offset = serial_map % self.n_parallel_samples
+        block_p_offset = parallel_map
+
+        outmap = self.n_parallel_chans_in * block_id + block_s_offset + (self.n_parallel_samples * block_p_offset)
         outmap[parallel_map == self._reduction_factor + 1] = -1
         return outmap
 
@@ -378,11 +393,14 @@ class ChanReorderMultiSample(ChanReorder):
         self.logger.info(f'Setting output {outidx} to channel {inidx}')
         assert np.dtype(self._map_format).itemsize == 4
         assert np.dtype(self._pmap_format).itemsize == 4
+        block_id = inidx // self.n_parallel_chans_in
+        block_s_offset = (inidx % self.n_parallel_chans_in) % self.n_parallel_samples
+        block_p_offset = (inidx % self.n_parallel_chans_in) // self.n_parallel_samples
         if inidx == -1:
-            inidx = self._reduction_factor + 1
-        self.write_int(f'map0_{self._map_reg}', inidx // self._reduction_factor, word_offset=outidx)
-        self.write_int('pmap', inidx % self._reduction_factor, word_offset=outidx)
-        
+            block_p_offset = self._reduction_factor + 1
+        else:
+            self.write_int(f'map0_{self._map_reg}', block_id*self.n_parallel_samples + block_s_offset, word_offset=outidx)
+        self.write_int('pmap', block_p_offset, word_offset=outidx)
 
     def initialize(self, read_only=False):
         """

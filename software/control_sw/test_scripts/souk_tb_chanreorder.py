@@ -34,7 +34,7 @@ def main(args):
         rng = np.random.default_rng(seed=args.seed)
         sel = rng.integers(0, r.chanselect.n_chans_in, args.nchan)
     chanmap[0:args.nchan] = sel
-    expected_output = np.round(chanmap**2 / 2.**16) # Firmware drops 16 bits
+    expected_output = np.round((chanmap*4/2**17)**2 * 2**18) # Firmware drops 16 bits
     r.chanselect.set_channel_outmap(chanmap)
     r.mixer.enable_power_mode()
     print('Getting spectra')
