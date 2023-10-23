@@ -347,7 +347,7 @@ class ChanReorderMultiSample(ChanReorder):
 
         serial_map[0:nout] = (block_id * self.n_parallel_samples) + block_s_offset
         parallel_map[0:nout] = block_p_offset
-        parallel_map[outmap == -1] = self._reduction_factor + 1
+        parallel_map[0:nout][outmap == -1] = self._reduction_factor + 1
 
         self.write(f'map0_{self._map_reg}', np.array(serial_map, dtype=self._map_format).tobytes())
         self.write('pmap', np.array(parallel_map, dtype=self._pmap_format).tobytes())
