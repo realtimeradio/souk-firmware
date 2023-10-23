@@ -242,8 +242,6 @@ class SoukMkidReadout():
         self.pfb         = pfb.Pfb(self._cfpga, f'{prefix}pfb',
                                fftshift=self.config.get('fftshift', 0xffffffff),
                            )
-        ##: Control interface to Mask (flagging) block
-        #self.mask        = mask.Mask(self._cfpga, 'mask')
         #: Control interface to Autocorrelation block
         self.autocorr    = autocorr.AutoCorr(self._cfpga, f'common_autocorr',
                                n_chans=self.fw_params['n_chan_rx'],
@@ -252,8 +250,6 @@ class SoukMkidReadout():
                                n_cores=1,
                                use_mux=False,
                            )
-        ##: Control interface to Equalization block
-        #self.eq          = eq.Eq(self._cfpga, 'eq', n_streams=64, n_coeffs=2**9)
         #: Control interface to post-PFB Test Vector Generator block
         self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, f'{prefix}pfbtvg',
                                 n_inputs=1,
@@ -320,34 +316,16 @@ class SoukMkidReadout():
         #: Control interface to LUT generators
         self.gen_lut       = generator.Generator(self._cfpga, f'common_lut_gen')
         if not self.fw_params['rx_only']:
-            ##: Control interface to Pre-Polyphase Synthesizer Reorder
-            #self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_input_reorder',
-            #                        n_chans_in=N_TONE,
-            #                        n_chans_out=N_TX_FFT,
-            #                        n_parallel_chans_in=8,
-            #                        parallel_first=False,
-            #                        support_zeroing=True,
-            #                    )
-            ##: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
-            #self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_offset_input_reorder',
-            #                        n_chans_in=N_TONE,
-            #                        n_chans_out=N_TX_FFT,
-            #                        n_parallel_chans_in=8,
-            #                        parallel_first=False,
-            #                        support_zeroing=True,
-            #                    )
+            #: Control interface to Pre-Polyphase Synthesizer Reorder
+            self.psb_chanselect = chanreorder.ChanReorderMultiSampleIn(self._cfpga, f'{prefix}synth_input_reorder',
+                                    n_serial_chans_out = N_TONE // 4,
+                                    n_parallel_chans_out=16,
+                                    n_parallel_samples=4,
+                                )
             #: Control interface to Polyphase Synthesizer block
             self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, f'{prefix}output')
-        ##: Control interface to Packetizer block
-        #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_hz=196.608)
-        ##: Control interface to 40GbE interface block
-        #self.eth         = eth.Eth(self._cfpga, 'eth')
-        ##: Control interface to Correlation block
-        #self.corr        = corr.Corr(self._cfpga,'corr_0', n_chans=2**12 // 8) # Corr module collapses channels by 8x
-        ##: Control interface to Power Monitor block
-        #self.powermon    = powermon.PowerMon(self._cfpga, 'powermon')
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
@@ -360,17 +338,16 @@ class SoukMkidReadout():
         self.blocks['input'      ] =  self.input
         self.blocks['pfb'        ] =  self.pfb
         self.blocks['pfbtvg'     ] =  self.pfbtvg
-        self.blocks['autocorr'     ] =  self.autocorr
-        self.blocks['output'       ] =  self.output
-        self.blocks['gen_cordic'   ] =  self.gen_cordic
-        self.blocks['gen_lut'      ] =  self.gen_lut
+        self.blocks['autocorr'   ] =  self.autocorr
+        self.blocks['output'     ] =  self.output
+        self.blocks['gen_cordic' ] =  self.gen_cordic
+        self.blocks['gen_lut'    ] =  self.gen_lut
         self.blocks['zoomfft'    ] =  self.zoomfft
         self.blocks['zoomacc'    ] =  self.zoomacc
         if not self.fw_params['rx_only']:
             self.blocks['chanselect' ] =  self.chanselect
             self.blocks['mixer'      ] =  self.mixer
-            #self.blocks['psb_chanselect' ] =  self.psb_chanselect
-            #self.blocks['psb_offset_chanselect' ] =  self.psb_offset_chanselect
+            self.blocks['psb_chanselect'] =  self.psb_chanselect
             self.blocks['psb'        ] =  self.psb
             self.blocks['accumulator0' ] =  self.accumulators[0]
             self.blocks['accumulator1' ] =  self.accumulators[1]

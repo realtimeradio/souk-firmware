@@ -442,27 +442,22 @@ class ChanReorderMultiSampleIn(ChanReorder):
     :param n_parallel_samples: Number of parallel samples input
     :type n_parallel_samples: int
 
-    :param support_zeroing: If True, allow the use of channel index ``-1`` to mean
-        "zero out this channel"
-    :type support_zeroing: bool
     """
-    _pmap_format = '>i4'
     _map_format = '>i4'
     def __init__(self, host, name,
             n_serial_chans_out=2**9,
             n_parallel_chans_out=2**4,
             n_parallel_samples=2**2,
-            support_zeroing=True,
             logger=None):
         super(ChanReorder, self).__init__(host, name, logger)
         self.n_chans_out = n_serial_chans_out * n_parallel_chans_out
         self.n_serial_chans_out = n_serial_chans_out
         self.n_parallel_chans_out = n_parallel_chans_out
         self.n_parallel_samples = n_parallel_samples
-        assert n_parallel_chans_in % n_parallel_samples == 0
+        assert n_parallel_chans_out % n_parallel_samples == 0
         self._expansion_factor = n_parallel_chans_out // n_parallel_samples
         self._reorder_depth = self.n_chans_out // self._expansion_factor
-        self.support_zeroing = support_zeroing
+        self.n_chans_in = self._reorder_depth
 
     def set_channel_outmap(self, outmap):
         """
@@ -478,20 +473,33 @@ class ChanReorderMultiSampleIn(ChanReorder):
         :type outmap: list of int
 
         """
-        serial_map = np.zeros(self._reorder_depth, dtype=self._map_format)
-        parallel_map = (self._reduction_factor + 1) * np.ones(self._reorder_depth, dtype=self._pmap_format)
-
+        # default to outputting last input
+        serial_maps = (self.n_chans_in - 1) * np.ones([self._expansion_factor, self._reorder_depth])
         outmap = np.array(outmap, dtype=int)
+        nout = len(outmap)
 
-        serial_map[0:len(outmap)] = outmap // self._reduction_factor
-        parallel_map[0:len(outmap)] = outmap % self._reduction_factor
-        parallel_map[outmap == -1] = self._reduction_factor + 1
+        # Which parallel path does a given output channel
+        # map to
+        block_id = (outmap // self.n_parallel_samples) % self._expansion_factor
+        # Which serial position in this path does a channel map to
+        block_s_offset = (outmap // self.n_parallel_chans_out)
+        # Which parallel position in this word in this path
+        block_p_offset = (outmap % self.n_parallel_samples)
 
-        print(len(serial_map.tobytes()))
-        print(len(parallel_map.tobytes()))
+        print('block:', block_id)
+        print('soff:', block_s_offset)
+        print('poff:', block_p_offset)
+        # Combined position in a block
+        block_offset = block_s_offset * self.n_parallel_samples + block_p_offset
+        print('off:', block_offset)
 
-        self.write(f'map0_{self._map_reg}', serial_map.tobytes())
-        self.write('pmap', parallel_map.tobytes())
+        for i in range(nout):
+            serial_maps[block_id[i], block_offset] = outmap[i]
+
+        serial_maps = np.array(serial_maps, dtype=self._map_format)
+
+        for i in range(self._expansion_factor):
+            self.write(f'map{i}_{self._map_reg}', serial_maps[i].tobytes())
 
     def get_channel_outmap(self):
         """
@@ -501,13 +509,22 @@ class ChanReorderMultiSampleIn(ChanReorder):
             channel number which emerges in the `i`th output position.
         :rtype: list
         """
-
         nbytes = self._reorder_depth * np.dtype(self._map_format).itemsize
-        serial_map = np.frombuffer(self.read(f'map0_{self._map_reg}', nbytes), dtype=self._map_format)
-        nbytes = self._reorder_depth * np.dtype(self._pmap_format).itemsize
-        parallel_map = np.frombuffer(self.read('pmap', nbytes), dtype=self._pmap_format)
-        outmap = serial_map * self._reduction_factor + parallel_map
-        outmap[parallel_map == self._reduction_factor + 1] = -1
+        serial_maps = np.zeros([self._expansion_factor, self._reorder_depth])
+        for i in range(self._expansion_factor):
+            serial_maps[i] = np.frombuffer(self.read(f'map{i}_{self._map_reg}', nbytes), dtype=self._map_format)
+
+        # Which serial position in each path does a channel map to
+        block_s_offset = serial_maps // self.n_parallel_samples
+        # Which parallel position in this word in this path
+        block_p_offset = serial_maps % self.n_parallel_samples
+
+        outmap = np.zeros(self.n_chans_out)
+        for i in range(self._expansion_factor):
+            for j in range(self._reorder_depth):
+                s_off = j // self.n_parallel_samples
+                p_off = j % self.n_parallel_samples
+                outmap[ i * self.n_parallel_samples + s_off*self.n_parallel_chans_out + p_off] = serial_maps[i, j]
         return outmap
 
     def set_single_channel(self, outidx, inidx):
@@ -528,11 +545,16 @@ class ChanReorderMultiSampleIn(ChanReorder):
         """
         self.logger.info(f'Setting output {outidx} to channel {inidx}')
         assert np.dtype(self._map_format).itemsize == 4
-        assert np.dtype(self._pmap_format).itemsize == 4
-        if inidx == -1:
-            inidx = self._reduction_factor + 1
-        self.write_int(f'map0_{self._map_reg}', inidx // self._reduction_factor, word_offset=outidx)
-        self.write_int('pmap', inidx % self._reduction_factor, word_offset=outidx)
+        # Which parallel path does a given output channel map to
+        block_id = (outidx // self._expansion_factor) % self.n_parallel_samples
+        # Which serial position in this path does a channel map to
+        block_s_offset = (outidx // self.n_parallel_chans_out)
+        # Which parallel position in this word in this path
+        block_p_offset = (outidx % self.n_parallel_samples)
+
+        # Combined position in a block
+        block_offset = block_s_offset * self.n_parallel_samples + block_p_offset
+        self.write_int(f'map{block_id}_{self._map_reg}', inidx, word_offset=block_offset)
         
 
     def initialize(self, read_only=False):
@@ -547,10 +569,7 @@ class ChanReorderMultiSampleIn(ChanReorder):
         if read_only:
             pass
         else:
-            if self.support_zeroing:
-                chan_order = np.ones(self._reorder_depth) * -1 # Disable everything
-            else:
-                chan_order = np.arange(0, self.n_chans_in, self._expansion_factor) # output every Nth channel
+            chan_order = (self.n_chans_in - 1) * np.ones(self.n_chans_out) # output all last channel
             self.set_channel_outmap(chan_order)
 
 class ChanReorderPS(ChanReorder):
