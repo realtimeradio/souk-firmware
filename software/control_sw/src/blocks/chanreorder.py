@@ -478,23 +478,21 @@ class ChanReorderMultiSampleIn(ChanReorder):
         outmap = np.array(outmap, dtype=int)
         nout = len(outmap)
 
+        outchans = np.arange(self.n_chans_out)
         # Which parallel path does a given output channel
         # map to
-        block_id = (outmap // self.n_parallel_samples) % self._expansion_factor
+        block_id = (outchans // self.n_parallel_samples) % self._expansion_factor
         # Which serial position in this path does a channel map to
-        block_s_offset = (outmap // self.n_parallel_chans_out)
+        block_s_offset = (outchans // self.n_parallel_chans_out)
         # Which parallel position in this word in this path
-        block_p_offset = (outmap % self.n_parallel_samples)
+        block_p_offset = (outchans % self.n_parallel_samples)
 
-        print('block:', block_id)
-        print('soff:', block_s_offset)
-        print('poff:', block_p_offset)
         # Combined position in a block
         block_offset = block_s_offset * self.n_parallel_samples + block_p_offset
-        print('off:', block_offset)
 
+        # We want the user-select channel to end up in position `block_offset` of the block `block_id`
         for i in range(nout):
-            serial_maps[block_id[i], block_offset] = outmap[i]
+            serial_maps[block_id[i], block_offset[i]] = outmap[i]
 
         serial_maps = np.array(serial_maps, dtype=self._map_format)
 
@@ -519,12 +517,12 @@ class ChanReorderMultiSampleIn(ChanReorder):
         # Which parallel position in this word in this path
         block_p_offset = serial_maps % self.n_parallel_samples
 
-        outmap = np.zeros(self.n_chans_out)
+        outmap = np.zeros(self.n_chans_out, dtype=int)
         for i in range(self._expansion_factor):
             for j in range(self._reorder_depth):
                 s_off = j // self.n_parallel_samples
                 p_off = j % self.n_parallel_samples
-                outmap[ i * self.n_parallel_samples + s_off*self.n_parallel_chans_out + p_off] = serial_maps[i, j]
+                outmap[i * self.n_parallel_samples + s_off*self.n_parallel_chans_out + p_off] = serial_maps[i, j]
         return outmap
 
     def set_single_channel(self, outidx, inidx):
