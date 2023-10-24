@@ -119,7 +119,7 @@ def main(args):
     n_chans = acc.n_chans
     fpga_clk = r.fpga.get_fpga_clock()
     r.adc_clk_hz = fpga_clk * 8 # HACK
-    acc_time_ms = 1000* acc_len * acc._n_serial_chans / r.fpga.get_fpga_clock()
+    acc_time_ms = 1000* acc_len * acc._n_serial_chans / acc._n_parallel_samples / r.fpga.get_fpga_clock()
     print(f'Accumulation time is approximately {acc_time_ms:.1f} milliseconds')
     freqs_hz = np.zeros(n_chans)
     phase_offsets = np.zeros(n_chans, dtype='<i4')
