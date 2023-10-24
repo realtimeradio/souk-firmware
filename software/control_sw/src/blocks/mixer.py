@@ -204,27 +204,24 @@ class Mixer(Block):
         """
         Get the currently loaded phase increment being applied to channel `chan`.
 
-        :return: (phase_step, phase_offset, enabled)
+        :return: (phase_step, phase_offset, scale)
             A tuple containing the phase increment (in radians) being applied
             to channel `chan` on each successive sample, the start phase in radians,
-            and a boolean indicating the channel is enabled.
+            and the scale factor being applied to this channel.
         :rtype: float
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         inc_regname = f'lo{p}_phase_inc'
         offset_regname = f'lo{p}_phase_offset'
-        # Read increment reg and mask off enable bit
-        inc_val = self.read_uint(inc_regname, word_offset=s)
-        enabled = bool(inc_val >> 31)
-        phase_step = inc_val & (2**31 - 1)
-        if phase_step > 2**30:
-            phase_step -= 2**31
-        phase_step = (phase_step / (2**self._phase_bp)) * np.pi
+        scale_regname = f'lo{p}_scale'
+        # Increment-per-clock
+        inc_val = self.read_int(inc_regname, word_offset=s) / 2**self._phase_bp * np.pi
         # Now phase offset
-        phase_offset = self.read_int(offset_regname, word_offset=s)
-        phase_offset = (phase_offset / (2**self._phase_offset_bp)) * np.pi
-        return phase_step, phase_offset, enabled
+        phase_offset = self.read_int(offset_regname, word_offset=s) / 2**self._phase_offset_bp * np.pi
+        # Finally scale
+        scale = self.read_uint(scale_regname, word_offset=s) / 2**_n_scale_bits
+        return phase_step, phase_offset, scale
 
     def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000):
         """

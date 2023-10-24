@@ -122,7 +122,12 @@ def main(args):
     acc_time_ms = 1000* acc_len * acc._n_serial_chans / acc._n_parallel_samples / r.fpga.get_fpga_clock()
     print(f'Accumulation time is approximately {acc_time_ms:.1f} milliseconds')
     freqs_hz = np.zeros(n_chans)
-    phase_offsets = np.zeros(n_chans, dtype='<i4')
+    phase_offsets_init = np.zeros(n_chans)
+    if args.update_los:
+        print('Initializing all LOs to bin centers')
+        # start with all LOs at 0
+        for i in range(n_chans):
+            r.mixer.set_phase_step(i, 0)
     addrs, nbytes = get_bram_addresses(acc)
     mixer_addrs, mixer_nbytes = get_bram_addresses_mixer(r.mixer)
     acc._wait_for_acc(0.00005)
@@ -132,25 +137,31 @@ def main(args):
     loop_cnt = 0
     times = []
     tlast = None
-    while True:
-        if args.wait_for_ip:
-            ip = wait_non_zero_ip(acc)
-        acc._wait_for_acc(0.00005)
-        tt0 = time.time()
-        t, d, err = fast_read_bram(acc, addrs, nbytes)
-        if ip is not None:
-            for p in format_packets(t, d, error=err):
-                sock.sendto(p, (ip, args.destport))
-        if err or (tlast is not None and tlast != t-1):
-            err_cnt += 1
-        if args.update_los:
-            fast_write_mixer(r.mixer, phase_offsets, mixer_addrs, mixer_nbytes)
-        tt1 = time.time()
-        times += [tt1 - tt0]
-        loop_cnt += 1
-        if loop_cnt == args.nloop:
-            break
-        tlast = t
+    try:
+        print('Entering loop')
+        while True:
+            if args.wait_for_ip:
+                ip = wait_non_zero_ip(acc)
+            acc._wait_for_acc(0.00005)
+            tt0 = time.time()
+            t, d, err = fast_read_bram(acc, addrs, nbytes)
+            if ip is not None:
+                for p in format_packets(t, d, error=err):
+                    sock.sendto(p, (ip, args.destport))
+            if err or (tlast is not None and tlast != t-1):
+                err_cnt += 1
+            if args.update_los:
+                # increment frequencies -- cycle through a bin every
+                phase_offsets = np.array(phase_offsets_init + ((loop_cnt % 100000) / 200000 * np.pi * 2**31), dtype='<i4')
+                fast_write_mixer(r.mixer, phase_offsets, mixer_addrs, mixer_nbytes)
+            tt1 = time.time()
+            times += [tt1 - tt0]
+            loop_cnt += 1
+            if loop_cnt == args.nloop:
+                break
+            tlast = t
+    except KeyboardInterrupt:
+        pass
     t1 = time.time()
     avg_read_ms = np.mean(times)*1000
     max_read_ms = np.max(times)*1000

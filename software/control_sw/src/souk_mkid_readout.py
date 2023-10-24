@@ -284,7 +284,7 @@ class SoukMkidReadout():
         self.mixer        = mixer.Mixer(self._cfpga, f'{prefix}mix',
                                 n_chans=N_TONE,
                                 n_parallel_chans=1,
-                                phase_bp=30,
+                                phase_bp=31,
                                 phase_offset_bp=31,
                                 n_scale_bits=12,
                             )
