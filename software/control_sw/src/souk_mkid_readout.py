@@ -395,7 +395,7 @@ class SoukMkidReadout():
         :rtype: (int, float)
         """
         # Select appropriate RX FFT bin and place this in tone slot ``tone_id``
-        rx_bin_centers_hz = np.fft.fftfreq(self.fw_params['n_chan'], 1./self.adc_clk_hz)
+        rx_bin_centers_hz = np.fft.fftfreq(self.fw_params['n_chan_rx'], 1./self.adc_clk_hz)
         rx_bin_centers_hz += self.adc_clk_hz/2. # account for upstream mixing
         # Distance of freq_hz from each bin center
         rx_freq_bins_offset_hz = freq_hz - rx_bin_centers_hz
@@ -453,7 +453,6 @@ class SoukMkidReadout():
         assert len(amplitudes) == n_tones
         chanmap_in = -1*np.ones(self.chanselect.n_chans_out, dtype=int)
         chanmap_psb = -1*np.ones(self.psb_chanselect.n_chans_out, dtype=int)
-        chanmap_psb_offset = -1*np.ones(self.psb_offset_chanselect.n_chans_out, dtype=int)
         lo_freqs_hz = np.zeros(n_tones, dtype=float)
         
         for fn, freq_hz in enumerate(freqs_hz):
@@ -463,22 +462,13 @@ class SoukMkidReadout():
             lo_freqs_hz[fn] = rx_freq_offset_hz
             ### Configure transmit side
             tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
-            # Even numbered bins are associated with the non-offset synth.
-            # Off bins are associated with the half-bin offset synth
-            use_offset_bank = bool(tx_nearest_bin % 2)
-            # Splitting the bins between banks means the index within a bank is halved
-            tx_nearest_bin = tx_nearest_bin // 2
-            if use_offset_bank:
-                chanmap_psb_offset[tx_nearest_bin] = fn
-            else:
-                chanmap_psb[tx_nearest_bin] = fn
+            chanmap_psb[tx_nearest_bin] = fn
         # Write input map
         self.chanselect.set_channel_outmap(chanmap_in)
         # Write mixer tones
         self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz)
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
-        self.psb_offset_chanselect.set_channel_outmap(chanmap_psb_offset)
 
     def set_output_psb_scale(self, nshift, check_overflow=True):
         """
@@ -518,10 +508,9 @@ class SoukMkidReadout():
         assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
         # Disable anywhere either synthesizer is already using this tone ID
         # TODO: is this the best behaviour?
-        for synth in [self.psb_chanselect, self.psb_offset_chanselect]:
-            chanmap = synth.get_channel_outmap()
-            for b in np.where(chanmap == tone_id)[0]:
-                synth.set_single_channel(b, -1)
+        chanmap = self.psb_chanselect.get_channel_outmap()
+        for b in np.where(chanmap == tone_id)[0]:
+            self.psb_chanselect.set_single_channel(b, -1)
         if freq_hz is None:
             return
         ### Configure receiving side
@@ -537,17 +526,6 @@ class SoukMkidReadout():
         ### Configure transmit side
         # Index of nearest bin
         tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
-        # Even numbered bins are associated with the non-offset synth.
-        # Off bins are associated with the half-bin offset synth
-        use_offset_bank = bool(tx_nearest_bin % 2)
-        # Splitting the bins between banks means the index within a bank is halved
-        tx_nearest_bin = tx_nearest_bin // 2
         # Get index of nearest bin, and place tone in this bin for relevant
         # synth bank.
-        if use_offset_bank:
-            self.logger.info("Using offset filter bank")
-            synth_reorder = self.psb_offset_chanselect
-        else:
-            self.logger.info("Using centered filter bank")
-            synth_reorder = self.psb_chanselect
-        synth_reorder.set_single_channel(tx_nearest_bin, tone_id)
+        self.psb_chanselect.set_single_channel(tx_nearest_bin, tone_id)
