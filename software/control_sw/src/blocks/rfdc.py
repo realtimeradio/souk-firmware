@@ -126,3 +126,34 @@ class Rfdc(Block):
         if read_only:
             return
         self.core.init(self.lmkfile, self.lmxfile)
+
+    def get_lo(self, adc_sample_rate_hz, tile, block):
+        """
+        Get current LO frequency.
+
+        :param adc_sample_rate_hz: ADC sample rate in Hz
+        :type adc_sample_rate_hz: float
+
+        :param tile: Zero-indexed tile ID of this ADC.
+        :type tile: int
+
+        :param block: Zero-indexed block ID of this ADC.
+        :type block: int
+
+        :return: LO frequency in Hz
+        :rtype: float
+        """
+        mode, coarse_freq, fine_freq_mhz = self.core.get_mixer_status(dev='adc', tile=tile, block=block)
+        DECIMATION = 2 # TODO: read from driver
+        if coarse_freq == 'fs/4':
+            coarse_freq = DECIMATION * adc_sample_rate_hz / 4.
+        elif coarse_freq == '-fs/4':
+            coarse_freq = -1 * DECIMATION * adc_sample_rate_hz / 4.
+        elif coarse_freq == 'fs/2':
+            coarse_freq = DECIMATION * adc_sample_rate_hz / 2.
+        else:
+            coarse_freq = 0
+
+        return coarse_freq + fine_freq_mhz*1e6
+
+        
