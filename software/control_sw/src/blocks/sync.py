@@ -322,14 +322,17 @@ class Sync(Block):
         tt = (self.read_uint('tt_sync_msb') << 32) + self.read_uint('tt_sync_lsb')
         return tt
 
-    def update_internal_time(self, fs_hz=None, offset_ns=0.0, sync_clock_factor=1):
+    def update_internal_time(self, clk_hz=None, sync_period=None, offset_ns=0.0, sync_clock_factor=1):
         """
         Arm sync trigger receivers,
         having loaded an appropriate telescope time.
 
-        :param fs_hz: The FPGA DSP clock rate, in Hz. Used to set the
+        :param clk_hz: The FPGA DSP clock rate, in Hz. Used to set the
             telescope time counter. If None is provided, self.clk_hz will be used.
-        :type fs_hz: int
+        :type clk_hz: int
+
+        :param sync_period: Sync pulse period, in FPGA clock ticks. If None, read
+            period from FPGA counters.
 
         :param offset_ns: Nanoseconds offset to add to the time loaded into the
             internal telescope time counter.
@@ -342,8 +345,8 @@ class Sync(Block):
 
         """
 
-        fs_hz = fs_hz or self.clk_hz
-        if fs_hz is None:
+        clk_hz = clk_hz or self.clk_hz
+        if clk_hz is None:
             self.logger.error('No FPGA clock rate was provided!')
             raise
 
@@ -355,10 +358,16 @@ class Sync(Block):
             self.logger.error(message)
             raise RuntimeError(message)
 
-        sync_period = (tt1 - tt0) / (sync1 - sync0)
-        self.logger.info("Detected sync period %.1f (2^%.1f) clocks" % (sync_period, log2(sync_period)))
+        sync_period_detect = (tt1 - tt0) / (sync1 - sync0)
+        self.logger.info("Detected sync period %.1f (2^%.1f) clocks" % (sync_period_detect, log2(sync_period_detect)))
+        if sync_period is None:
+            sync_period = sync_period_detect
+        else:
+            self.logger.info("Using provided sync period of %d clocks" % sync_period)
+            delta = abs(sync_period - sync_period_detect) / sync_period
+            self.logger.info("Measured sync period differs from provided by %.3f%%" % (delta * 100))
         sync_period = int(sync_period)
-        sync_period_s = sync_period / fs_hz
+        sync_period_s = sync_period / clk_hz
         sync_period_ms = 1000*sync_period_s
         sync_period_us = 1000000*sync_period_s
         self.logger.info("Detected sync period is %.3f milliseconds" % (sync_period_ms))
@@ -380,10 +389,10 @@ class Sync(Block):
         # Syncs should come every `sync_period` ADC clocks
         self.wait_for_sync()
         now = time.time()
-        now_clocks = int(now * fs_hz)
+        now_clocks = int(now * clk_hz)
         next_sync_clocks = int(round((now_clocks / sync_period))) + 1 
         next_sync_clocks *= sync_period
-        next_sync = next_sync_clocks / fs_hz
+        next_sync = next_sync_clocks / clk_hz
 
         # Wait for 20% of a sync period
         time.sleep(sync_period_s * 0.2) # Earlier warning is issued if NTP offset > 10% of a period
@@ -391,9 +400,9 @@ class Sync(Block):
         delay = next_sync - time.time()
         if delay < (sync_period_s / 4): # Must load at least 1/4 period before sync
             self.logger.error("Took too long to configure telescope time register")
-        offset_samples = offset_ns * (fs_hz*1e-9)
+        offset_samples = offset_ns * (clk_hz*1e-9)
         offset_samples_aligned = round(offset_samples/sync_clock_factor) * sync_clock_factor # maintain factor
-        self.offset_ns = offset_samples_aligned / (fs_hz*1e-9)
+        self.offset_ns = offset_samples_aligned / (clk_hz*1e-9)
 
         self.logger.info(
             "Offset of {} ns ({} samples) applied (requested {} ns ({} samples), rounded the nearest multiple of {} samples)".format(
