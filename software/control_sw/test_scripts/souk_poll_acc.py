@@ -61,11 +61,11 @@ def fast_read_bram(acc, addrs, nbytes):
     """
     nbranch = len(addrs)
     base_addr = addrs[0]
-    dout = np.zeros(acc.n_chans, dtype='<i8') # 8 bytes for real+imag
+    dout = np.zeros(2*acc.n_chans, dtype='<i4') # 2*4 bytes for real+imag
     start_acc_cnt = acc.get_acc_cnt()
     for i, addr in enumerate(addrs):
         raw = acc.host.transport.axil_mm[addr:addr + nbytes]
-        dout[i::nbranch] = np.frombuffer(raw, dtype='<i8')
+        dout[i::nbranch] = np.frombuffer(raw, dtype='<i4')
     stop_acc_cnt = acc.get_acc_cnt()
     if start_acc_cnt != stop_acc_cnt:
         acc.logger.warning('Accumulation counter changed while reading data!')
@@ -108,6 +108,17 @@ def format_packets(t, d, error=False, pkt_nbyte=1024):
     for i in range(npkt):
         packets += [header + struct.pack('>I', i) + payload_bytes[i*pkt_nbyte:(i+1)*pkt_nbyte]]
     return packets
+
+def step_los(start_phase_steps, loop_cnt):
+    """
+    Increment phases by a small fraction of a bin width each sample
+    """
+    return start_phase_steps + ((loop_cnt % 100000) / 200000 * np.pi * 2**31)
+
+def compute_phases(start_phase_steps, acc):
+    acc_phase = np.arctan2(acc[0::2], acc[1::2])
+    C = 0.01 # arbitrary constant
+    return start_phase_steps  + C*acc_phase
     
 
 def main(args):
@@ -151,8 +162,8 @@ def main(args):
             if err or (tlast is not None and tlast != t-1):
                 err_cnt += 1
             if args.update_los:
-                # increment frequencies -- cycle through a bin every
-                phase_offsets = np.array(phase_offsets_init + ((loop_cnt % 100000) / 200000 * np.pi * 2**31), dtype='<i4')
+                #phase_offsets = np.array(step_los(phase_offsets_init, loop_cnt), dtype='<i4')
+                phase_offsets = np.array(compute_phases(phase_offsets_init, d), dtype='<i4')
                 fast_write_mixer(r.mixer, phase_offsets, mixer_addrs, mixer_nbytes)
             tt1 = time.time()
             times += [tt1 - tt0]
