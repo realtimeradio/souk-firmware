@@ -13,11 +13,3 @@ Welcome to SOUK MKID Readout's documentation!
    installation.rst
    system_overview.rst
    control.rst
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
