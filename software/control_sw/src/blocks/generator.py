@@ -4,6 +4,7 @@ from .block import Block
 from souk_mkid_readout.error_levels import *
 
 class Generator(Block):
+    _n_bp = 15 #: vector binary point
     def __init__(self, host, name, logger=None):
         """
         :param host: CasperFpga interface for host.
@@ -34,7 +35,7 @@ class Generator(Block):
         self._n_parallel  = (x >> 16) & 0xff
         self.n_samples    = 2**((x >> 8)  & 0xff)
 
-    def set_lut_output(self, n, x):
+    def set_lut_output(self, n, x, scale=True):
         """
         Set LUT output `n` to sample array `x`.
 
@@ -43,6 +44,11 @@ class Generator(Block):
 
         :param x: Array (or list) of complex sample values
         :type x: list or numpy.array
+
+        :param scale: If True, scale to the maximum possible amplitude range.
+            Otherwise, saturate overflowing values.
+        :type scale: bool
+
         """
         if self.n_generators is None:
             self._get_block_params()
@@ -53,8 +59,22 @@ class Generator(Block):
         if len(x) != self.n_samples:
             self.logger.error(f'{len(x)} sample were provided but expected {self.n_samples}')
             return
-        imag = np.array(x.imag * 2**14, dtype='>i2')
-        real = np.array(x.real * 2**14, dtype='>i2')
+        x *= 2**self._n_bp
+        max_val = np.max([np.max(np.abs(x.real)), np.max(np.abs(x.imag))])
+        if max_val > (2**self._n_bp - 1): # Disallows max negative value
+            f = (2**self._n_bp - 1) / max_val
+            if scale:
+                self.logger.warning(f'Rescaling values by {f}')
+                x *= f
+            else:
+                self.logger.warning('Saturating some vector values')
+                x.real[x.real > (2**self._n_bp - 1)] = 2**self._n_bp
+                x.real[x.real < -(2**self._n_bp - 1)] = -2**self._n_bp
+                x.imag[x.imag > (2**self._n_bp - 1)] = 2**self._n_bp
+                x.imag[x.imag < -(2**self._n_bp - 1)] = -2**self._n_bp
+
+        imag = np.array(np.round(x.imag), dtype='>i2')
+        real = np.array(np.round(x.real), dtype='>i2')
         self.write(f'{n}_i', real.tobytes())
         self.write(f'{n}_q', imag.tobytes())
 
@@ -75,7 +95,7 @@ class Generator(Block):
         return real + 1j*imag
 
     def set_output_freq(self, n, freq_hz, sample_rate_hz=2457600000,
-                        amplitude=1., round_freq=True, window=False):
+                        amplitude=None, round_freq=True, window=False):
         """
         Set an output to a CW tone at a specific frequency.
 
@@ -88,8 +108,8 @@ class Generator(Block):
         :param sample_rate_hz: DAC sample rate, in Hz
         :type sample_rate_hz: float
 
-        :param amplitude: Set the output of amplitude of the CW signal. Only
-            applicable for LUT-based generators
+        :param amplitude: Set the output of amplitude of the CW signal. If not provided,
+            use maximum scale.
         :type amplitude: float
 
         :param round_freq: If True, round ``freq_hz`` to the nearest frequency which
@@ -101,6 +121,9 @@ class Generator(Block):
             This option affects only LUT generators.
         :type window: bool
         """
+        if amplitude is None:
+            amplitude = (1 - 1/2**self._n_bp) # Max scale
+
         if n == -1:
            if self.n_generators is None:
                self._get_block_params()
@@ -123,12 +146,10 @@ class Generator(Block):
                 x *= np.hanning(self.n_samples)
             self.set_lut_output(n, x)
         else:
-            if amplitude != 1.0:
-                self.logger.warning("Amplitude setting not used for CORDIC generators")
             phase_step = 2*np.pi * freq_hz / sample_rate_hz
-            self.set_cordic_output(n, phase_step)
+            self.set_cordic_output(n, phase_step, amplitude)
 
-    def set_cordic_output(self, n, p):
+    def set_cordic_output(self, n, p, amplitude):
         """
         Set CORDIC output `n` to increment by phase `p` every sample.
 
@@ -137,6 +158,8 @@ class Generator(Block):
 
         :param p: phase increment, in units of radians
         :type p: float
+
+        :param amplitude: Amplitude of output CW signal
         """
         if self.n_generators is None:
             self._get_block_params()
@@ -152,6 +175,8 @@ class Generator(Block):
         phase_scaled = int(phase_scaled * 2**63)
         self.write_int(f'{n}_phase_inc_msb', (phase_scaled >> 32) & 0xffffffff)
         self.write_int(f'{n}_phase_inc_lsb', phase_scaled & 0xffffffff)
+        amp_scaled = int(amplitude * 2**self._n_bp)
+        self.write_int(f'{n}_amplitude', amp_scaled)
         self.reset_phase()
 
     def reset_phase(self):
