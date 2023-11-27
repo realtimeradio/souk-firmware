@@ -45,7 +45,7 @@ class Generator(Block):
         :param x: Array (or list) of complex sample values
         :type x: list or numpy.array
 
-        :param scale: If True, scale to the maximum possible amplitude range.
+        :param scale: If True, scale to the maximum possible amplitude range in event of overflow.
             Otherwise, saturate overflowing values.
         :type scale: bool
 
@@ -122,7 +122,7 @@ class Generator(Block):
         :type window: bool
         """
         if amplitude is None:
-            amplitude = (1 - 1/2**self._n_bp) # Max scale
+            amplitude = 0.95 * (1 - 1/2**self._n_bp) # 95% max scale
 
         if n == -1:
            if self.n_generators is None:
@@ -149,7 +149,7 @@ class Generator(Block):
             phase_step = 2*np.pi * freq_hz / sample_rate_hz
             self.set_cordic_output(n, phase_step, amplitude)
 
-    def set_cordic_output(self, n, p, amplitude):
+    def set_cordic_output(self, n, p, amplitude=None):
         """
         Set CORDIC output `n` to increment by phase `p` every sample.
 
@@ -159,8 +159,13 @@ class Generator(Block):
         :param p: phase increment, in units of radians
         :type p: float
 
-        :param amplitude: Amplitude of output CW signal
+        :param amplitude: Set the output of amplitude of the CW signal. If not provided,
+            use maximum scale.
+        :type amplitude: float
         """
+        if amplitude is None:
+            amplitude = 0.95 * (1 - 1/2**self._n_bp) # 95% max scale
+
         if self.n_generators is None:
             self._get_block_params()
         if n >= self.n_generators:
@@ -178,6 +183,20 @@ class Generator(Block):
         amp_scaled = int(amplitude * 2**self._n_bp)
         self.write_int(f'{n}_amplitude', amp_scaled)
         self.reset_phase()
+
+    def get_cordic_overflows(self):
+        """
+        Get the number of overflow events in the CORDIC pipeline since
+        the last phase reset. Return 0 if no CORDIC generators exist.
+
+        :return: Overflows since last reset
+        :rtype: bool
+        """
+        if self.n_generators is None:
+            self._get_block_params()
+        if self.n_generators == 0:
+            return 0
+        return self.read_uint('of_counter')
 
     def reset_phase(self):
         """
