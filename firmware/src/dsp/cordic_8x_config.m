@@ -12,7 +12,7 @@ function cordic_8x_config(this_block)
   
   this_block.addSimulinkInport('phase_inc');
   this_block.addSimulinkInport('load');
-  this_block.addSimulinkInport('amplitude');
+  this_block.addSimulinkInport('scale');
 
   this_block.addSimulinkOutport('dout');
 
@@ -28,8 +28,8 @@ function cordic_8x_config(this_block)
     if (this_block.port('load').width ~= 1);
       this_block.setError('Input data type for port "load" must have width=1.');
     end
-    if (this_block.port('amplitude').width ~= 16);
-      this_block.setError('Input data type for port "amplitude" must have width=16.');
+    if (this_block.port('scale').width ~= 16);
+      this_block.setError('Input data type for port "scale" must have width=16.');
     end
   end  % if(inputTypesKnown)
   % -----------------------------
