@@ -1,6 +1,7 @@
 from os import path
 import logging
 import yaml
+import time
 import numpy as np
 import casperfpga
 
@@ -528,6 +529,7 @@ class SoukMkidReadout():
         shift = 2**nshift - 1
         for psb in [self.psb, self.psboffset]:
             psb.set_fftshift(shift)
+        self.psbscale.set_scale(scale)
         if not check_overflow:
             return FENG_OK
         rv = FENG_OK
