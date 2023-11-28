@@ -1,6 +1,7 @@
 from os import path
 import logging
 import yaml
+import time
 import numpy as np
 import casperfpga
 
@@ -22,6 +23,7 @@ from .blocks import chanreorder
 from .blocks import mixer
 from .blocks import accumulator
 from .blocks import generator
+from .blocks import psbscale
 from .blocks import output
 from .blocks import common
 #from .blocks import packetizer
@@ -324,6 +326,8 @@ class SoukMkidReadout():
                                 )
             #: Control interface to Polyphase Synthesizer block
             self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
+        #: Control interface to PSB scale block
+        self.psbscale      = psbscale.PsbScale(self._cfpga, f'{prefix}psbscale')
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, f'{prefix}output')
 
@@ -338,10 +342,11 @@ class SoukMkidReadout():
         self.blocks['input'      ] =  self.input
         self.blocks['pfb'        ] =  self.pfb
         self.blocks['pfbtvg'     ] =  self.pfbtvg
-        self.blocks['autocorr'   ] =  self.autocorr
-        self.blocks['output'     ] =  self.output
-        self.blocks['gen_cordic' ] =  self.gen_cordic
-        self.blocks['gen_lut'    ] =  self.gen_lut
+        self.blocks['autocorr'     ] =  self.autocorr
+        self.blocks['output'       ] =  self.output
+        self.blocks['gen_cordic'   ] =  self.gen_cordic
+        self.blocks['gen_lut'      ] =  self.gen_lut
+        self.blocks['psbscale'     ] =  self.psbscale
         self.blocks['zoomfft'    ] =  self.zoomfft
         self.blocks['zoomacc'    ] =  self.zoomacc
         if not self.fw_params['rx_only']:
@@ -470,24 +475,40 @@ class SoukMkidReadout():
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
 
-    def set_output_psb_scale(self, nshift, check_overflow=True):
+    def set_output_psb_scale(self, nshift, scale=1., check_overflow=True):
         """
         Set the PSB to scale down by 2^nshift in amplitude.
 
         :param nshift: Number of shift down stages in the PSB FFTs
         :type nshift: int
 
+        :param scale: Post PSB scaling factor
+        :type scale: float
+
         :param check_overflow: If True, warn about PSB overflow before returning.
         :type check_overflow: bool
+
+        :return: If check_overflow is set, return FENG_OK if no overflows are detected,
+            of FENG_ERROR otherwise. Return FENG_OK if check_overflow is not set.
+        :rtype: int
+
         """
         shift = 2**nshift - 1
         self.psb.set_fftshift(shift)
+        self.psbscale.set_scale(scale)
         if not check_overflow:
-            return
-        psb_of = psb.get_overflow_count()
+            return FENG_OK
+        rv = FENG_OK
+        psb_of = self.psb.get_overflow_count()
+        psbsum_of = self.psbscale.get_overflow_count()
         time.sleep(1)
-        if not psb.get_overflow_count == psb_of:
+        if not self.psb.get_overflow_count() == psb_of:
             self.logger.warning('PSB appears to be overflowing. Check psb.get_status() for more info')
+            rv = FENG_ERROR
+        if not psbsum_of == 0:
+            self.logger.warning('PSB overflow when summing overlapped banks')
+            rv = FENG_ERROR
+        return rv
 
     def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0):
         """
