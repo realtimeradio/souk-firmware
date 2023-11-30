@@ -1,0 +1,162 @@
+# Setup and Install
+0. Kill any running instances of TBS
+
+  `ps aux | grep borph`
+
+  note the PID of the running tcpborphserver
+
+  `kill -9 <PID>`
+
+1. Install librfdc.so.8.1
+
+  In the CASPER RFSoC4x2 Linux image, either replace `librfdc.so.1.1` at
+  `/opt/local/lib` with this library, or copy `librfdc.so.8.1` to `/opt/local/lib`
+  and update the `librfdc.so.1` symbolic link to point to this new library.
+
+  `mv librfdc.so.8.1 /opt/local/lib/librfdc.so.1.1`
+
+  or
+
+  ```
+  mv librfdc.so.8.1 /opt/local/lib/
+  cd /opt/local/lib
+  rm librfdc.so.1
+  ln -s librfdc.so.8.1 librfdc.so.1
+  ```
+
+2. Install the new tcpborphserver, `tcpborphserver_v8.1`
+
+  Replace the existing one at `/home/casper/bin/` renaming `tcpborphserver_v8.1`
+  to `tcpborphserver`  e.g.,
+
+  `mv tcpborphserver_v8.1 /home/casper/bin/tcpborphserver`
+
+3. Reboot the board
+
+4. Start a telnet or netcat session with the platform
+
+5. check the version of the library using the `?rfdc-driver-ver` command
+
+  Version 8.1 is expected to be returned
+
+  ```
+  ?rfdc-driver-ver
+  #rfdc-driver-ver version:\_8.100000
+  !rfdc-driver-ver ok
+  ```
+
+# Functions and examples
+
+## Using TBS over a netcat or telnet connection
+Get DSA
+  ?rfdc-get-dsa tile-idx blk-idx
+
+Valid ranges for both tile-idx and blk-idx are (0-3). TBS handles range and
+bound checking. For a disabled tile, block, or unavaiable converter,
+"(disabled)" is returned.
+
+Example:
+```
+?rfdc-get-dsa 0 0
+#rfdc-get-dsa dsa\_0
+!rfdc-get-dsa ok
+?rfdc-get-dsa 0 1
+#rfdc-get-dsa (disabled)
+!rfdc-get-dsa ok
+?rfdc-get-dsa 1 0
+#rfdc-get-dsa dsa\_0
+!rfdc-get-dsa ok
+?Rfdc-get-dsa 1 1
+#rfdc-get-dsa (disabled)
+!rfdc-get-dsa ok
+``` 
+
+Set DSA
+  ?rfdc-set-dsa tile-idx blk-idx atten-dB
+
+Valid ranges for both tile-idx and blk-idx are (0-3). TBS handles range and
+bound checking. The attenuation is read after set and the read value is returned
+to confirm the correct setting. For a disabled tile, block, or unavaiable
+converter, "(disabled)" is returned.
+
+Example:
+```
+?rfdc-set-dsa 3 0 15
+#log info 1620626524.220 raw
+request\_set\_adc\_dsa\_tile:\_3,\_blk:\_0\_to\_15.0\_dB
+#rfdc-set-dsa dsa\_15
+!rfdc-set-dsa ok
+?rfdc-set-dsa 3 0 25
+#log info 1620626546.242 raw
+request\_set\_adc\_dsa\_tile:\_3,\_blk:\_0\_to\_25.0\_dB
+#rfdc-set-dsa dsa\_25
+!rfdc-set-dsa ok
+```
+
+Get output DAC current
+  ?rfdc-get-output-current tile-idx blk-idx
+
+Example:
+```
+?rfdc-get-output-current 2 0
+#rfdc-get-output-current current\_19993
+!rfdc-get-output-current ok
+```
+
+Valid ranges for both tile-idx and blk-idx are (0-3). TBS handles range and
+bound checking. For a disabled tile, block, or unavaiable converter,
+"(disabled)" is returned.
+
+Set VOP current
+  ?rfdc-set-vop tile-idx blk-idx current-uA
+
+Example:
+```
+?rfdc-set-vop 2 0 25000
+#log info 1620626491.564 raw
+request\_set\_dac\_tile:\_2,\_blk:\_0,\_vop:\_25000\_uA
+#rfdc-set-vop current\_24981
+!rfdc-set-vop ok
+```
+
+Valid ranges for both tile-idx and blk-idx are (0-3). TBS handles range and
+bound checking on current settings. The current is read after set and the read
+value is returned to confirm the actual output current. For a disabled tile,
+block, or unavaiable converter, "(disabled)" is returned.
+
+## using casperfpga
+
+```
+# get the rfdc object
+In [6]: rfdc = r.adcs.rfdc
+
+# get_dsa(tile-idx, blk-idx), a dictionary of the dsa value is returned
+In [7]: rfdc.get_dsa(0, 0)
+Out[7]: {'dsa': '10'}
+
+In [8]: rfdc.get_dsa(1, 0)
+Out[8]: {'dsa': '0'}
+
+# set_dsa(tile-idx, blk-idx)
+In [9]: rfdc.set_dsa(1, 0, 20)
+Out[9]: {'dsa': '20'}
+
+# get_output_current(tile-idx, blk-idx)
+In [10]: rfdc.get_output_current(0, 0)
+Out[10]: {'current': '19993'}
+
+In [11]: rfdc.get_output_current(1, 0)
+Out[11]: {'current': '19993'}
+
+# set_vop(tile-idx, blk-idx, curr_uA)
+In [12]: rfdc.set_vop(0, 0, 34500)
+Out[12]: {'current': '34475'}
+
+# an empty dictionary is returned if targeting a tile/block pair that is
+disabled or not available in all DSA/Current commands
+In [13]: rfdc.set_dsa(0, 1, 10)
+Out[13]: {}
+
+In [14]: rfdc.get_output_current(0, 1)
+Out[14]: {}
+```
