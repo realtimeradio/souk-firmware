@@ -4,7 +4,7 @@ pdoc3
 numpy
 scipy
 matplotlib
-pyyaml==5.4.1
+pyyaml
 termcolor
 progressbar
 remoteobjects
