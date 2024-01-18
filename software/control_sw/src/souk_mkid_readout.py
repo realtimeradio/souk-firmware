@@ -331,7 +331,7 @@ class SoukMkidReadout():
             #: Control interface to Polyphase Synthesizer block
             self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
         #: Control interface to PSB scale block
-        self.psbscale      = psbscale.PsbScale(self._cfpga, f'{prefix}psbscale')
+        self.psbscale      = psbscale.PsbScale(self._cfpga, f'{prefix}psb') # This is a hack because the scale doesn't have its own block
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, f'{prefix}output')
 
@@ -358,6 +358,7 @@ class SoukMkidReadout():
             self.blocks['mixer'      ] =  self.mixer
             self.blocks['psb_chanselect'] =  self.psb_chanselect
             self.blocks['psb'        ] =  self.psb
+            self.blocks['psbscale'   ] =  self.psbscale
             self.blocks['accumulator0' ] =  self.accumulators[0]
             self.blocks['accumulator1' ] =  self.accumulators[1]
 
