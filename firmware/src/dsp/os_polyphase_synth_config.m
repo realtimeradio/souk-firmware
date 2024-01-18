@@ -16,13 +16,16 @@ function os_polyphase_synth_config(this_block)
   this_block.addSimulinkInport('din1');
 
   this_block.addSimulinkOutport('sync_out');
-  this_block.addSimulinkOutport('dout');
+  this_block.addSimulinkOutport('dout0');
+  this_block.addSimulinkOutport('dout1');
   this_block.addSimulinkOutport('overflow');
 
   overflow_port = this_block.port('overflow');
   overflow_port.setType('Bool');
-  dout_port = this_block.port('dout');
-  dout_port.setType('UFix_256_0');
+  dout0_port = this_block.port('dout0');
+  dout0_port.setType('UFix_288_0');
+  dout1_port = this_block.port('dout1');
+  dout1_port.setType('UFix_288_0');
   sync_out_port = this_block.port('sync_out');
   sync_out_port.setType('Bool');
 
