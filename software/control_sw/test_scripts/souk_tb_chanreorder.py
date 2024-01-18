@@ -35,7 +35,7 @@ def main(args):
         sel = rng.integers(0, r.chanselect.n_chans_in, args.nchan)
     chanmap[0:args.nchan] = sel
     expected_output = np.round((chanmap*4/2**17)**2 * 2**18) # Firmware drops 16 bits
-    r.chanselect.set_channel_outmap(chanmap)
+    r.chanselect.set_channel_outmap(chanmap, descramble_input=False) # TVG isn't scrambled
     r.mixer.enable_power_mode()
     print('Getting spectra')
     acc.get_new_spectra() # Flush a spectra
@@ -53,7 +53,7 @@ def main(args):
                 passed = False
     
     print('Checking channel order in readback')
-    chanmap_readback = r.chanselect.get_channel_outmap()
+    chanmap_readback = r.chanselect.get_channel_outmap(descramble_input=False)
     for i in range(r.chanselect.n_chans_out):
         if i < args.nchan_print:
             print(i, 'expected:', chanmap[i], 'read:', chanmap_readback[i])

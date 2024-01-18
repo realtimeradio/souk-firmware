@@ -271,6 +271,7 @@ class SoukMkidReadout():
                                     n_parallel_chans_in = 2**4,
                                     n_parallel_samples=2**2,
                                     support_zeroing=True,
+                                    default_descramble_input = not self.fw_params['pfb_descrambled'],
                                 )
         #: Control interface to Zoom FFT
         self.zoomfft      = zoom_pfb.ZoomPfb(self._cfpga, f'common_zoom_fft',

@@ -1,6 +1,7 @@
 import struct
 import numpy as np
 from .block import Block
+from ..helpers import get_casper_fft_descramble, get_casper_fft_scramble
 
 class ChanReorder(Block):
     """
@@ -293,6 +294,10 @@ class ChanReorderMultiSample(ChanReorder):
     :param n_parallel_samples: Number of parallel samples output
     :type n_parallel_samples: int
 
+    :param default_descramble_input: If True, the default is to compensate for an
+        upstream scrambled FFT channel order.
+    :type default_descramble_input: bool
+
     :param support_zeroing: If True, allow the use of channel index ``-1`` to mean
         "zero out this channel"
     :type support_zeroing: bool
@@ -304,19 +309,23 @@ class ChanReorderMultiSample(ChanReorder):
             n_parallel_chans_in=2**4,
             n_parallel_samples=2**2,
             support_zeroing=True,
+            default_descramble_input=False,
             logger=None):
         super(ChanReorder, self).__init__(host, name, logger)
         self.n_chans_in = n_serial_chans_in * n_parallel_chans_in
         self.n_serial_chans_in = n_serial_chans_in
         self.n_parallel_chans_in = n_parallel_chans_in
         self.n_parallel_samples = n_parallel_samples
+        self._descramble_default = default_descramble_input
+        self._descramble_order = get_casper_fft_descramble(int(np.log2(self.n_chans_in)), int(np.log2(n_parallel_chans_in)))
+        self._scramble_order = get_casper_fft_scramble(int(np.log2(self.n_chans_in)), int(np.log2(n_parallel_chans_in)))
         assert n_parallel_chans_in % n_parallel_samples == 0
         self._reduction_factor = n_parallel_chans_in // n_parallel_samples # Number of parallel transpose blocks (see firmware!)
         self._reorder_depth = self.n_chans_in // self._reduction_factor
         self.support_zeroing = support_zeroing
         self.n_chans_out = self._reorder_depth
 
-    def set_channel_outmap(self, outmap):
+    def set_channel_outmap(self, outmap, descramble_input=None):
         """
         Remap the channels such that the channel outmap[i]
         emerges out of the reorder map in position i.
@@ -329,12 +338,20 @@ class ChanReorderMultiSample(ChanReorder):
             will be channel 16. 
         :type outmap: list of int
 
+        :param descramble_input: If True, descramble the provided channel map.
+            If not provided, descramble if the _descramble_default attribute is True.
+        :type descramble_input: bool
+
         """
         serial_map = np.zeros(self._reorder_depth)
         parallel_map = (self._reduction_factor + 1) * np.ones(self._reorder_depth)
 
         nout = len(outmap)
-
+        if descramble_input or (descramble_input is None and self._descramble_default):
+            for i in range(nout):
+                if outmap[i] == -1:
+                    continue
+                outmap[i] = self._descramble_order[outmap[i]]
         block_id = np.zeros(nout)
         block_s_offset = np.zeros(nout)
         block_p_offset = np.zeros(nout)
@@ -352,9 +369,13 @@ class ChanReorderMultiSample(ChanReorder):
         self.write(f'map0_{self._map_reg}', np.array(serial_map, dtype=self._map_format).tobytes())
         self.write('pmap', np.array(parallel_map, dtype=self._pmap_format).tobytes())
 
-    def get_channel_outmap(self):
+    def get_channel_outmap(self, descramble_input=None):
         """
         Read the currently loaded reorder map.
+
+        :param descramble_input: If True, descramble the recovered channel map.
+            If not provided, descramble if the _descramble_default attribute is True.
+        :type descramble_input: bool
 
         :return: The reorder map currently loaded. Entry `i` in this map is the
             channel number which emerges in the `i`th output position.
@@ -372,9 +393,14 @@ class ChanReorderMultiSample(ChanReorder):
 
         outmap = self.n_parallel_chans_in * block_id + block_s_offset + (self.n_parallel_samples * block_p_offset)
         outmap[parallel_map == self._reduction_factor + 1] = -1
+        if descramble_input or (descramble_input is None and self._descramble_default):
+            for i in range(len(outmap)):
+                if outmap[i] == -1:
+                    continue
+                outmap[i] = self._scramble_order[outmap[i]]
         return outmap
 
-    def set_single_channel(self, outidx, inidx):
+    def set_single_channel(self, outidx, inidx, descramble_input=None):
         """
         Set output channel number ``outidx`` to input number ``inidx``.
         Do this by reading the total channel map, modifying a single entry,
@@ -389,8 +415,15 @@ class ChanReorderMultiSample(ChanReorder):
 
         :param inidx: Input channel index to select.
         :type inidx: int
+
+        :param descramble_input: If True, descramble the provided channel map.
+            If not provided, descramble if the _descramble_default attribute is True.
+        :type descramble_input: bool
+
         """
         self.logger.info(f'Setting output {outidx} to channel {inidx}')
+        if descramble_input or (descramble_input is None and self._descramble_default):
+            inidx = self._descramble_order[inidx]
         assert np.dtype(self._map_format).itemsize == 4
         assert np.dtype(self._pmap_format).itemsize == 4
         block_id = inidx // self.n_parallel_chans_in
