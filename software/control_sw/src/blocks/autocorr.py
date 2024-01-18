@@ -3,6 +3,7 @@ import struct
 import numpy as np
 
 from .block import Block
+from ..helpers import get_casper_fft_descramble
 from souk_mkid_readout.error_levels import *
 
 class AutoCorr(Block):
@@ -42,6 +43,9 @@ class AutoCorr(Block):
     :param n_cores: Number of accumulation cores in firmware design.
     :type n_cores: int
 
+    :param is_descrambled: If False, apply descrable map to channel ordering on read.
+    :type is_descrambled: bool
+
     :param use_mux: If True, only one core is instantiated and a multiplexer
         is used to switch different inputs into it. If False, multiple
         cores are instantiated simultaneously in firmware.
@@ -57,6 +61,7 @@ class AutoCorr(Block):
                  n_signals=64,
                  n_parallel_streams=8,
                  n_cores=4,
+                 is_descrambled=False,
                  use_mux=True,
                 ):
         super(AutoCorr, self).__init__(host, name, logger)
@@ -66,7 +71,9 @@ class AutoCorr(Block):
         self._n_parallel_streams = n_parallel_streams
         self._n_cores = n_cores
         self._use_mux = use_mux
+        self._is_descrambled = is_descrambled
         self.n_signals_per_block = self.n_signals // self._n_cores
+        self._descramble_order = get_casper_fft_descramble(int(np.log2(n_chans)), int(np.log2(n_parallel_streams)))
 
     def get_acc_cnt(self):
         """
@@ -146,6 +153,9 @@ class AutoCorr(Block):
                 for subsignal in range(self.n_signals_per_block):
                     dout[core*self.n_signals_per_block + subsignal, stream::self._n_parallel_streams] = \
                         x[subsignal*n_chans_per_stream:(subsignal+1)*n_chans_per_stream]
+        if not self._is_descrambled:
+            for i in range(dout.shape[0]):
+                dout[i] = dout[i][self._descramble_order]
         return dout
 
     def _arm_readout(self):

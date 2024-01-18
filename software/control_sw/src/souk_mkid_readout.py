@@ -40,10 +40,12 @@ FW_TYPE_PARAMS = {
         10: {
             'n_chan_rx': 2**16,
             'rx_only': True,
+            'pfb_descrambled':True,
             },
         'defaults': {
             'n_chan_rx': N_RX_FFT,
             'rx_only': False,
+            'pfb_descrambled':False,
             },
         }
 
@@ -251,6 +253,7 @@ class SoukMkidReadout():
                                n_parallel_streams=16,
                                n_cores=1,
                                use_mux=False,
+                               is_descrambled=self.fw_params['pfb_descrambled'],
                            )
         #: Control interface to post-PFB Test Vector Generator block
         self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, f'{prefix}pfbtvg',
