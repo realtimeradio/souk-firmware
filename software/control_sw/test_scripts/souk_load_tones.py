@@ -52,9 +52,10 @@ def main(host, configfile, freqs_hz, randomphase=False):
             continue
         # Figure out if there might be a problem with tones too close
         offsets_hz = np.abs(freqs_hz - f)
-        closest_offset_hz = min(offsets_hz[offsets_hz>=0])
-        if closest_offset_hz < min_tone_separation_hz:
-            print(f"Warning: Frequency {f} Hz is only {closest_offset_hz}<{min_tone_separation_hz} from its neighbour")
+        if n_tones > 1:
+            closest_offset_hz = min(offsets_hz[offsets_hz>0])
+            if closest_offset_hz < min_tone_separation_hz:
+                print(f"Warning: Frequency {f} Hz is only {closest_offset_hz}<{min_tone_separation_hz} from its neighbour")
         r.set_tone(i, f, phase_offset_rads=p)
     # Set the Polyphase Synthesizer shift schedule. I.e., scale the
     # PSB FFT so that it cannot overflow, based on the number of input tones
