@@ -7,3 +7,6 @@
 [submodule "firmware/lib/device-tree-xlnx"]
 	path = firmware/lib/device-tree-xlnx
 	url = https://github.com/Xilinx/device-tree-xlnx/
+[submodule "software/zynq/katcp_devel"]
+	path = software/zynq/katcp_devel
+	url = git@github.com:realtimeradio/katcp_devel
