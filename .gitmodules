@@ -9,4 +9,4 @@
 	url = https://github.com/Xilinx/device-tree-xlnx/
 [submodule "software/zynq/katcp_devel"]
 	path = software/zynq/katcp_devel
-	url = git@github.com:realtimeradio/katcp_devel
+	url = https://github.com/realtimeradio/katcp_devel
