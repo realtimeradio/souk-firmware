@@ -18,6 +18,13 @@ class Mixer(Block):
     :param n_chans: Number of channels this block processes
     :type n_chans: int
 
+    :param n_upstream_chans: Number of channels in the upstream PFB prior to downselection
+    :type n_upstream_chans: int
+
+    :param upstream_oversample_factor: Oversampling factor of upstream system. This, with the
+       number of upstream channels, should allow this block to figure out how wide channels are.
+    :type upstream_oversample_factor: int
+
     :param n_parallel_chans: Number of channels this block processes in parallel
     :type n_parallel_chans: int
 
@@ -27,6 +34,8 @@ class Mixer(Block):
     """
     def __init__(self, host, name,
             n_chans=4096,
+            n_upstream_chans=8192,
+            upstream_oversample_factor=2,
             n_parallel_chans=4,
             phase_bp=31,
             phase_offset_bp=31,
@@ -35,6 +44,8 @@ class Mixer(Block):
         super(Mixer, self).__init__(host, name, logger)
         self.n_chans = n_chans
         assert n_chans % n_parallel_chans == 0
+        self._n_upstream_chans = n_upstream_chans
+        self._upstream_oversample_factor = upstream_oversample_factor
         self._n_parallel_chans = n_parallel_chans
         self._n_serial_chans = n_chans // n_parallel_chans
         self._phase_bp = phase_bp
@@ -86,7 +97,7 @@ class Mixer(Block):
         if freq_offset_hz is None:
             phase_step = None
         else:
-            fft_period_s = self.n_chans / sample_rate_hz
+            fft_period_s = self._n_upstream_chans / self._upstream_oversample_factor / sample_rate_hz
             fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
             phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
         self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset)
@@ -252,7 +263,7 @@ class Mixer(Block):
         except TypeError:
             scaling = scaling * np.ones(n_tone, dtype=float)
         
-        fft_period_s = self.n_chans / sample_rate_hz
+        fft_period_s = self._n_upstream_chans / self._upstream_oversample_factor / sample_rate_hz
         fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
         phase_steps = freqs_hz / fft_rbw_hz * 2 * np.pi
         phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
