@@ -55,7 +55,7 @@ class PsbScale(Block):
         :return: Number of overflows
         :rtype: int
         """
-        return self.read_uint('of_count')
+        return self.read_uint('scale_of_count')
 
     def get_status(self):
         """
