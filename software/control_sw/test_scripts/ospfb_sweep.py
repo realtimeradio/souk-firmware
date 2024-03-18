@@ -15,19 +15,20 @@ def set_output_freq(r, f, lut=False):
         r.gen_lut.set_output_freq(0, f, r.adc_clk_hz, 0.25)
     else:
         r.output.use_cordic()
-        for i in range(4):
+        for i in range(r.gen_cordic.n_generators):
             r.gen_cordic.set_output_freq(i, f, r.adc_clk_hz)
         r.gen_cordic.reset_phase()
 
-def scan_bin(r, n, p=50, b=4):
+def scan_bin(r, n, p=50, b=4, n_chans=4096):
     """
     params:
       r: SoukMkidReadout Instance
       n: PFB bin to center on
       p: Number of frequency points to plot
       b: Number of PFB bins to sweep over
+      n_chans: Number of channels in oversampled PFB
     """
-    df = r.adc_clk_hz / 2048 / 2
+    df = r.adc_clk_hz / n_chans
     print(f'Using ADC clk {r.adc_clk_hz} Hz')
     print(f'Bin separation is {df} Hz')
     freqs = np.linspace((n-b//2)*df, (n+b//2)*df, p)
@@ -36,15 +37,15 @@ def scan_bin(r, n, p=50, b=4):
         print(f"Sweeping tone {fn+1} of {p} ({freq:.3f} Hz)", end=' ')
         set_output_freq(r, freq)
         x = np.fft.fftshift(r.autocorr.get_new_spectra(0, True)[0])
-        binstart = 2048 + n - b//2
-        binstop  = 2048 + n - b//2 + b
+        binstart = n_chans // 2 + n - b//2
+        binstop  = n_chans // 2 + n - b//2 + b
         print(f"(Maximum power found in bin {x.argmax()}, getting data from bins {binstart}-{binstop})")
         for i in range(b):
-            d[i,fn] = x[2048 + n - b//2 + i]
+            d[i,fn] = x[n_chans // 2 + n - b//2 + i]
     return d
 
-def plot_scan(r, n, p, b, normalize=True):
-    d = scan_bin(r, n, p, b)
+def plot_scan(r, n, p, b, normalize=True, n_chans=4096):
+    d = scan_bin(r, n, p, b, n_chans=n_chans)
     if normalize:
         d /= d.max()
     for i in range(b):
@@ -56,6 +57,7 @@ def main(host, configfile):
     r = souk_mkid_readout.SoukMkidReadout(host, configfile=configfile)
     r.program()
     r.initialize()
+    n_chans = r.autocorr.n_chans
     r.output.use_cordic()
     r.input.enable_loopback()
     r.pfb.set_fftshift(0xffffffff)
@@ -63,7 +65,7 @@ def main(host, configfile):
     r.sync.arm_sync()
     r.sync.sw_sync()
     overflow_before = r.pfb.get_overflow_count()
-    plot_scan(r, 100, 200, 6)
+    plot_scan(r, 100, 200, 6, n_chans=n_chans)
     overflow_after = r.pfb.get_overflow_count()
     overflow_count = overflow_after - overflow_before
     print(f"Total FFT overflows during scan: {overflow_count}")
