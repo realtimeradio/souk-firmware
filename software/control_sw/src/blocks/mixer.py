@@ -166,7 +166,7 @@ class Mixer(Block):
             phase_offset = np.array([phase_offset])
         n_tone = len(phase)
         assert len(phase_offset) == n_tone
-        phase_int = np.zeros(len(phase), dtype='u4')
+        phase_int = np.zeros(len(phase), dtype='i4')
         phase_offset_int = np.zeros(len(phase_offset), dtype='i4')
         for i in range(n_tone):
             phase_scaled = phase[i] / np.pi # units of pi rads
@@ -231,8 +231,8 @@ class Mixer(Block):
         # Now phase offset
         phase_offset = self.read_int(offset_regname, word_offset=s) / 2**self._phase_offset_bp * np.pi
         # Finally scale
-        scale = self.read_uint(scale_regname, word_offset=s) / 2**_n_scale_bits
-        return phase_step, phase_offset, scale
+        scale = self.read_uint(scale_regname, word_offset=s) / 2**self._n_scale_bits
+        return inc_val, phase_offset, scale
 
     def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000):
         """
@@ -269,8 +269,8 @@ class Mixer(Block):
         phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
         scaling = self._format_amp_scale(scaling)
         # format appropriately
-        phase_steps = np.array(phase_steps, dtype='>u4')
-        phase_offsets = np.array(phase_offsets, dtype='>u4')
+        phase_steps = np.array(phase_steps, dtype='>i4')
+        phase_offsets = np.array(phase_offsets, dtype='>i4')
         scaling = np.array(scaling, dtype='>u4')
         for i in range(min(self._n_parallel_chans, n_tone)):
             regprefix = f'lo{i}'
