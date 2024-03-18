@@ -11,13 +11,10 @@ CONFIGFILE = '/home/jackh/src/souk-firmware/software/control_sw/config/souk-sing
 
 def set_output_freq(r, f, output='psb'):
     if output == 'psb':
-        r.output.use_psb()
         r.set_tone(0, f + r.adc_clk_hz / 2.) # for consistency of setpoint relative to DAC mixer
     elif output == 'lut':
-        r.output.use_lut()
         r.gen_lut.set_output_freq(0, f, r.adc_clk_hz, 0.25)
     elif output == 'cordic':
-        r.output.use_cordic()
         for i in range(r.gen_cordic.n_generators):
             r.gen_cordic.set_output_freq(i, f, r.adc_clk_hz)
         r.gen_cordic.reset_phase()
@@ -63,6 +60,15 @@ def main(host, configfile, output):
     r = souk_mkid_readout.SoukMkidReadout(host, configfile=configfile)
     r.program()
     r.initialize()
+    if output == 'psb':
+        r.output.use_psb()
+        r.set_output_psb_scale(1)
+    elif output == 'lut':
+        r.output.use_lut()
+    elif output == 'cordic':
+        r.output.use_cordic()
+    else:
+        raise ValueError(f"I don't understand output type {output}")
     n_chans = r.autocorr.n_chans
     r.input.enable_loopback()
     r.pfb.set_fftshift(0xffffffff)
