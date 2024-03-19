@@ -54,6 +54,8 @@ def plot_scan(r, n, p, b, normalize=True, n_chans=4096, output='cordic'):
     for i in range(b):
         plt.plot(10*np.log10(d[i]), label=i)
     plt.legend()
+    plt.xlabel('Freq [Arb.]')
+    plt.ylabel('Power [dB]')
     plt.show()
 
 def main(host, configfile, output):
