@@ -2,7 +2,7 @@
 A repository for Simons Observatory UK FPGA firmware and control software.
 
 ## Software Versions:
-- Ubuntu 18.04
+- Ubuntu 20.04
 - Xilinx Vivado System Edition 2021.2
 - MATLAB/Simulink 2021a
 

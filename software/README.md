@@ -33,3 +33,6 @@ python
 >>> import souk_mkid_readout
 ```
 
+# Zynq Local Software
+
+Current version of tcpborphserver is available in `./zynq` and should be installed on the RFSoC board per the `readme` in that directory

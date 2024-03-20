@@ -18,6 +18,13 @@ class Mixer(Block):
     :param n_chans: Number of channels this block processes
     :type n_chans: int
 
+    :param n_upstream_chans: Number of channels in the upstream PFB prior to downselection
+    :type n_upstream_chans: int
+
+    :param upstream_oversample_factor: Oversampling factor of upstream system. This, with the
+       number of upstream channels, should allow this block to figure out how wide channels are.
+    :type upstream_oversample_factor: int
+
     :param n_parallel_chans: Number of channels this block processes in parallel
     :type n_parallel_chans: int
 
@@ -27,6 +34,8 @@ class Mixer(Block):
     """
     def __init__(self, host, name,
             n_chans=4096,
+            n_upstream_chans=8192,
+            upstream_oversample_factor=2,
             n_parallel_chans=4,
             phase_bp=31,
             phase_offset_bp=31,
@@ -35,6 +44,8 @@ class Mixer(Block):
         super(Mixer, self).__init__(host, name, logger)
         self.n_chans = n_chans
         assert n_chans % n_parallel_chans == 0
+        self._n_upstream_chans = n_upstream_chans
+        self._upstream_oversample_factor = upstream_oversample_factor
         self._n_parallel_chans = n_parallel_chans
         self._n_serial_chans = n_chans // n_parallel_chans
         self._phase_bp = phase_bp
@@ -86,7 +97,7 @@ class Mixer(Block):
         if freq_offset_hz is None:
             phase_step = None
         else:
-            fft_period_s = self.n_chans / sample_rate_hz
+            fft_period_s = self._n_upstream_chans / self._upstream_oversample_factor / sample_rate_hz
             fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
             phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
         self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset)
@@ -155,17 +166,13 @@ class Mixer(Block):
             phase_offset = np.array([phase_offset])
         n_tone = len(phase)
         assert len(phase_offset) == n_tone
-        phase_int = np.zeros(len(phase), dtype='u4')
+        phase_int = np.zeros(len(phase), dtype='i4')
         phase_offset_int = np.zeros(len(phase_offset), dtype='i4')
         for i in range(n_tone):
             phase_scaled = phase[i] / np.pi # units of pi rads
             phase_scaled = ((phase_scaled + 1) % 2) - 1 # -pi to pi
             phase_scaled = int(phase_scaled * 2**self._phase_bp)
-            # set the MSB high
-            if phase_scaled >= 0:
-                phase_int[i] = (1<<31) + phase_scaled
-            else:
-                phase_int[i] = (1<<31) + (phase_scaled + (1<<31))
+            phase_int[i] = phase_scaled
             phase_offset_scaled = phase_offset[i] / np.pi # units of pi rads
             phase_offset_scaled = ((phase_offset_scaled + 1) % 2) - 1 # -pi to pi
             phase_offset_scaled = int(phase_offset_scaled * 2**self._phase_offset_bp)
@@ -208,27 +215,24 @@ class Mixer(Block):
         """
         Get the currently loaded phase increment being applied to channel `chan`.
 
-        :return: (phase_step, phase_offset, enabled)
+        :return: (phase_step, phase_offset, scale)
             A tuple containing the phase increment (in radians) being applied
             to channel `chan` on each successive sample, the start phase in radians,
-            and a boolean indicating the channel is enabled.
+            and the scale factor being applied to this channel.
         :rtype: float
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         inc_regname = f'lo{p}_phase_inc'
         offset_regname = f'lo{p}_phase_offset'
-        # Read increment reg and mask off enable bit
-        inc_val = self.read_uint(inc_regname, word_offset=s)
-        enabled = bool(inc_val >> 31)
-        phase_step = inc_val & (2**31 - 1)
-        if phase_step > 2**30:
-            phase_step -= 2**31
-        phase_step = (phase_step / (2**self._phase_bp)) * np.pi
+        scale_regname = f'lo{p}_scale'
+        # Increment-per-clock
+        inc_val = self.read_int(inc_regname, word_offset=s) / 2**self._phase_bp * np.pi
         # Now phase offset
-        phase_offset = self.read_int(offset_regname, word_offset=s)
-        phase_offset = (phase_offset / (2**self._phase_offset_bp)) * np.pi
-        return phase_step, phase_offset, enabled
+        phase_offset = self.read_int(offset_regname, word_offset=s) / 2**self._phase_offset_bp * np.pi
+        # Finally scale
+        scale = self.read_uint(scale_regname, word_offset=s) / 2**self._n_scale_bits
+        return inc_val, phase_offset, scale
 
     def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000):
         """
@@ -259,14 +263,14 @@ class Mixer(Block):
         except TypeError:
             scaling = scaling * np.ones(n_tone, dtype=float)
         
-        fft_period_s = self.n_chans / sample_rate_hz
+        fft_period_s = self._n_upstream_chans / self._upstream_oversample_factor / sample_rate_hz
         fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
         phase_steps = freqs_hz / fft_rbw_hz * 2 * np.pi
         phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
         scaling = self._format_amp_scale(scaling)
         # format appropriately
-        phase_steps = np.array(phase_steps, dtype='>u4')
-        phase_offsets = np.array(phase_offsets, dtype='>u4')
+        phase_steps = np.array(phase_steps, dtype='>i4')
+        phase_offsets = np.array(phase_offsets, dtype='>i4')
         scaling = np.array(scaling, dtype='>u4')
         for i in range(min(self._n_parallel_chans, n_tone)):
             regprefix = f'lo{i}'

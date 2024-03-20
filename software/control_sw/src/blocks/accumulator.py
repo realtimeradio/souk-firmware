@@ -29,6 +29,10 @@ class Accumulator(Block):
         module in parallel.
     :type n_parallel_chans: int
 
+    :param n_parallel_samples: Number of samples processed by the firmware
+        module in parallel.
+    :type n_parallel_samples: int
+
     :param is_complex: If True, block accumulates complex-valued data.
     :type is_complex: Bool
 
@@ -43,6 +47,7 @@ class Accumulator(Block):
                  acc_len=2**15,
                  n_chans=4096,
                  n_parallel_chans=8,
+                 n_parallel_samples=1,
                  is_complex=True,
                  dtype='>i4',
                  has_dest_ip=False,
@@ -50,6 +55,7 @@ class Accumulator(Block):
         super(Accumulator, self).__init__(host, name, logger)
         self.n_chans = n_chans
         self._n_parallel_chans = n_parallel_chans
+        self._n_parallel_samples = n_parallel_samples
         self._default_acc_len = acc_len
         assert n_chans % n_parallel_chans == 0
         self._n_serial_chans = n_chans // n_parallel_chans
@@ -197,7 +203,8 @@ class Accumulator(Block):
         :return: Current accumulation length
         :rtype: int
         """
-        return self.read_int('acc_len') // self._n_serial_chans
+        acc_len = self._n_parallel_samples * self.read_uint('acc_len') // self._n_serial_chans
+        return acc_len 
 
     def set_acc_len(self, acc_len):
         """
@@ -206,7 +213,10 @@ class Accumulator(Block):
         :param acc_len: Number of spectra to accumulate
         :type acc_len: int
         """
-        acc_len = acc_len * self._n_serial_chans
+        if not acc_len % self._n_parallel_samples == 0:
+            self.logger.critical(f'Accumulation length must be a multiple of {self._n_parallel_samples}')
+            raise ValueError
+        acc_len = self._n_serial_chans * acc_len // self._n_parallel_samples
         self.write_int('acc_len', acc_len)
 
     def read_tt(self):
@@ -295,6 +305,10 @@ class WindowedAccumulator(Accumulator):
         module in parallel.
     :type n_parallel_chans: int
 
+    :param n_parallel_samples: Number of samples processed by the firmware
+        module in parallel.
+    :type n_parallel_samples: int
+
     :param is_complex: If True, block accumulates complex-valued data.
     :type is_complex: Bool
 
@@ -309,6 +323,7 @@ class WindowedAccumulator(Accumulator):
                  acc_len=2**15,
                  n_chans=4096,
                  n_parallel_chans=8,
+                 n_parallel_samples=1,
                  is_complex=True,
                  dtype='>i4',
                  has_dest_ip=False,
@@ -320,7 +335,9 @@ class WindowedAccumulator(Accumulator):
                 ):
         super(WindowedAccumulator, self).__init__(host, name, logger,
                 acc_len=acc_len, n_chans=n_chans,
-                n_parallel_chans=n_parallel_chans, is_complex=is_complex,
+                n_parallel_chans=n_parallel_chans,
+                n_parallel_samples=n_parallel_samples,
+                is_complex=is_complex,
                 dtype=dtype, has_dest_ip=has_dest_ip)
         self._window_bp = window_bp
         self._window_dtype = window_dtype

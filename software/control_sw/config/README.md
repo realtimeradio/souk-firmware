@@ -1,4 +1,6 @@
-## Clock configuration files
+# Clock configuration files
+
+## RFSoC4x2
 
 Clock configuration is made by setting the `lmkfile` and `lmxfile`
 keys of a configuration YAML file.
@@ -22,3 +24,12 @@ You can check what clock files are currently available with:
 
 On-board 100 MHz reference: `rfsoc4x2_PL_122M88_REF_245M76.txt`
 External 10 MHz reference: `rfsoc4x2_PL_122M88_REF_245M76_10M_EXTREF.txt`
+
+## KRM RFSoC
+
+Clock configuration is loaded at boot.
+
+Symlink an appropriate LMK configuration file to `/etc/krc-utils.d/clock.d/lmk04208.txt` on the SoC's filesystem,
+and an appropriate LMX configuration file to `/etc/krc-utils.d/clock.d/lmx2594.txt`
+
+Some pre-made configurations are available in the `krm-clock-config` directory.

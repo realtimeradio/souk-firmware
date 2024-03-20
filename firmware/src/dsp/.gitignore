@@ -14,3 +14,5 @@ zoom_fft_1024c_d4096/*
 !zoom_fft_1024c_d4096/*.dcp
 polyphase_synth/*
 !polyphase_synth/*.dcp
+cordic_1x/*
+!cordic_1x/*.dcp

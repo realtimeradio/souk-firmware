@@ -1,6 +1,7 @@
 from os import path
 import logging
 import yaml
+import time
 import numpy as np
 import casperfpga
 
@@ -9,10 +10,9 @@ from . import __version__
 from .error_levels import *
 from .blocks import fpga
 from .blocks import rfdc
+from .blocks import adc_snapshot
 from .blocks import sync
-#from .blocks import noisegen
 from .blocks import input
-#from .blocks import delay
 from .blocks import pfb
 from .blocks import zoom_pfb
 #from .blocks import mask
@@ -23,7 +23,9 @@ from .blocks import chanreorder
 from .blocks import mixer
 from .blocks import accumulator
 from .blocks import generator
+from .blocks import psbscale
 from .blocks import output
+from .blocks import common
 #from .blocks import packetizer
 #from .blocks import eth
 #from .blocks import corr
@@ -31,17 +33,19 @@ from .blocks import output
 
 N_TONE = 2048 # Number of independent tones the design can generate
 N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
-N_RX_FFT = N_RX_OVERSAMPLE*2048 # Number of FFT points in RX channelizer 
-N_TX_FFT = 2048 # Number of FFT points in TX synthesizer (not including oversampling)
+N_RX_FFT = N_RX_OVERSAMPLE*4096 # Number of FFT points in RX channelizer 
+N_TX_FFT = 4096 # Number of FFT points in TX synthesizer (not including oversampling)
 
 FW_TYPE_PARAMS = {
         10: {
             'n_chan_rx': 2**16,
             'rx_only': True,
+            'pfb_descrambled':True,
             },
         'defaults': {
             'n_chan_rx': N_RX_FFT,
             'rx_only': False,
+            'pfb_descrambled':False,
             },
         }
 
@@ -125,7 +129,10 @@ class SoukMkidReadout():
         except:
             self.logger.exception(f"Failed to parse config file {f}")
             raise
-        self.fpgfile = self.config.get('fpgfile', self.fpgfile)
+        fpgfile = self.config.get('fpgfile', self.fpgfile)
+        if fpgfile is not None and fpgfile.startswith('.'):
+            fpgfile = path.realpath(path.join(path.dirname(f), fpgfile))
+        self.fpgfile = fpgfile
         self.adc_clk_hz = self.config.get('adc_clk_hz', None)
         if self.fpgfile is not None:
             self.read_fpg(self.fpgfile)
@@ -224,6 +231,8 @@ class SoukMkidReadout():
             except KeyError:
                 self.logger.error('No default firmware parameters available!')
                 raise
+        #: Common block shared with other pipelines
+        self.common      = common.Common(self._cfpga, 'common')
         #: Control interface to RFDC block
         self.rfdc        = rfdc.Rfdc(self._cfpga, 'rfdc',
                                lmkfile=self.config.get('lmkfile', None),
@@ -231,54 +240,51 @@ class SoukMkidReadout():
                            )
         #: Control interface to Synchronization / Timing block
         self.sync        = sync.Sync(self._cfpga, f'{prefix}sync')
-        ##: Control interface to Noise Generation block
-        #self.noise       = noisegen.NoiseGen(self._cfpga, 'noise', n_noise=2, n_outputs=64)
         #: Control interface to Input Multiplex block
         self.input       = input.Input(self._cfpga, f'{prefix}input')
-        ##: Control interface to Coarse Delay block
-        #self.delay       = delay.Delay(self._cfpga, 'delay', n_streams=64)
+        #: Control interface to ADC Snapshot block
+        self.adc_snapshot = adc_snapshot.AdcSnapshot(self._cfpga, f'common_adc_ss')
+
         #: Control interface to PFB block
         self.pfb         = pfb.Pfb(self._cfpga, f'{prefix}pfb',
                                fftshift=self.config.get('fftshift', 0xffffffff),
                            )
-        ##: Control interface to Mask (flagging) block
-        #self.mask        = mask.Mask(self._cfpga, 'mask')
         #: Control interface to Autocorrelation block
-        self.autocorr    = autocorr.AutoCorr(self._cfpga, f'{prefix}autocorr',
+        self.autocorr    = autocorr.AutoCorr(self._cfpga, f'common_autocorr',
                                n_chans=self.fw_params['n_chan_rx'],
                                n_signals=1,
                                n_parallel_streams=16,
                                n_cores=1,
                                use_mux=False,
+                               is_descrambled=self.fw_params['pfb_descrambled'],
                            )
-        ##: Control interface to Equalization block
-        #self.eq          = eq.Eq(self._cfpga, 'eq', n_streams=64, n_coeffs=2**9)
         #: Control interface to post-PFB Test Vector Generator block
         self.pfbtvg       = pfbtvg.PfbTvg(self._cfpga, f'{prefix}pfbtvg',
                                 n_inputs=1,
                                 n_chans=self.fw_params['n_chan_rx'],
                                 n_serial_inputs=1,
-                                n_rams=4,
+                                n_rams=0,
                                 n_samples_per_word=4,
                                 sample_format='h',
                             )
         #: Control interface to Channel Reorder block
         if not self.fw_params['rx_only']:
-            self.chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}chan_select',
-                                    n_chans_in=self.fw_params['n_chan_rx'],
-                                    n_chans_out=N_TONE,
-                                    n_parallel_chans_in=16,
-                                    parallel_first=True,
+            self.chanselect   = chanreorder.ChanReorderMultiSample(self._cfpga, f'{prefix}chan_select',
+                                    n_serial_chans_in=self.fw_params['n_chan_rx'] // 2**4,
+                                    n_parallel_chans_in = 2**4,
+                                    n_parallel_samples=2**2,
                                     support_zeroing=True,
+                                    default_descramble_input = not self.fw_params['pfb_descrambled'],
                                 )
         #: Control interface to Zoom FFT
-        self.zoomfft      = zoom_pfb.ZoomPfb(self._cfpga, f'{prefix}zoom_fft',
+        self.zoomfft      = zoom_pfb.ZoomPfb(self._cfpga, f'common_zoom_fft',
                                fftshift=0xffffffff
                             )
         #: Control interface to Zoom FFT Power Accumulator
-        self.zoomacc      = accumulator.Accumulator(self._cfpga, f'{prefix}zoom_acc',
+        self.zoomacc      = accumulator.Accumulator(self._cfpga, f'common_zoom_acc',
                                     n_chans=1024,
                                     n_parallel_chans=1,
+                                    n_parallel_samples=4,
                                     dtype='>u8',
                                     is_complex=False,
                                     has_dest_ip=False,
@@ -286,8 +292,10 @@ class SoukMkidReadout():
         #: Control interface to Mixer block
         self.mixer        = mixer.Mixer(self._cfpga, f'{prefix}mix',
                                 n_chans=N_TONE,
-                                n_parallel_chans=8,
-                                phase_bp=30,
+                                n_upstream_chans=self.fw_params['n_chan_rx'],
+                                upstream_oversample_factor = N_RX_OVERSAMPLE,
+                                n_parallel_chans=1,
+                                phase_bp=31,
                                 phase_offset_bp=31,
                                 n_scale_bits=12,
                             )
@@ -296,7 +304,8 @@ class SoukMkidReadout():
             self.accumulators   =  []
             self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc0',
                                         n_chans=N_TONE,
-                                        n_parallel_chans=8,
+                                        n_parallel_chans=1,
+                                        n_parallel_samples=4,
                                         dtype='>i4',
                                         is_complex=True,
                                         has_dest_ip=True,
@@ -305,7 +314,8 @@ class SoukMkidReadout():
                                    ]
             self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc1',
                                         n_chans=N_TONE,
-                                        n_parallel_chans=8,
+                                        n_parallel_chans=1,
+                                        n_parallel_samples=4,
                                         dtype='>i4',
                                         is_complex=True,
                                         has_dest_ip=True,
@@ -313,40 +323,22 @@ class SoukMkidReadout():
                                     )
                                    ]
         #: Control interface to CORDIC generators
-        self.gen_cordic    = generator.Generator(self._cfpga, f'{prefix}cordic_gen')
+        self.gen_cordic    = generator.Generator(self._cfpga, f'common_cordic_gen')
         #: Control interface to LUT generators
-        self.gen_lut       = generator.Generator(self._cfpga, f'{prefix}lut_gen')
+        self.gen_lut       = generator.Generator(self._cfpga, f'common_lut_gen')
         if not self.fw_params['rx_only']:
             #: Control interface to Pre-Polyphase Synthesizer Reorder
-            self.psb_chanselect   = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_input_reorder',
-                                    n_chans_in=N_TONE,
-                                    n_chans_out=N_TX_FFT,
-                                    n_parallel_chans_in=8,
-                                    parallel_first=False,
-                                    support_zeroing=True,
-                                )
-            #: Control interface to Pre-Offset-Polyphase Synthesizer Reorder
-            self.psb_offset_chanselect = chanreorder.ChanReorder(self._cfpga, f'{prefix}synth_offset_input_reorder',
-                                    n_chans_in=N_TONE,
-                                    n_chans_out=N_TX_FFT,
-                                    n_parallel_chans_in=8,
-                                    parallel_first=False,
-                                    support_zeroing=True,
+            self.psb_chanselect = chanreorder.ChanReorderMultiSampleIn(self._cfpga, f'{prefix}synth_input_reorder',
+                                    n_serial_chans_out = N_TONE // 4,
+                                    n_parallel_chans_out=16,
+                                    n_parallel_samples=4,
                                 )
             #: Control interface to Polyphase Synthesizer block
             self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
-            #: Control interface to HalF-Channel-Offset Polyphase Synthesizer block
-            self.psboffset     = pfb.Pfb(self._cfpga, f'{prefix}psboffset', fftshift=0b111)
+        #: Control interface to PSB scale block
+        self.psbscale      = psbscale.PsbScale(self._cfpga, f'{prefix}psb') # This is a hack because the scale doesn't have its own block
         #: Control interface to Output Multiplex block
         self.output        = output.Output(self._cfpga, f'{prefix}output')
-        ##: Control interface to Packetizer block
-        #self.packetizer  = packetizer.Packetizer(self._cfpga, 'packetizer', sample_rate_hz=196.608)
-        ##: Control interface to 40GbE interface block
-        #self.eth         = eth.Eth(self._cfpga, 'eth')
-        ##: Control interface to Correlation block
-        #self.corr        = corr.Corr(self._cfpga,'corr_0', n_chans=2**12 // 8) # Corr module collapses channels by 8x
-        ##: Control interface to Power Monitor block
-        #self.powermon    = powermon.PowerMon(self._cfpga, 'powermon')
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
@@ -363,15 +355,15 @@ class SoukMkidReadout():
         self.blocks['output'       ] =  self.output
         self.blocks['gen_cordic'   ] =  self.gen_cordic
         self.blocks['gen_lut'      ] =  self.gen_lut
+        self.blocks['psbscale'     ] =  self.psbscale
         self.blocks['zoomfft'    ] =  self.zoomfft
         self.blocks['zoomacc'    ] =  self.zoomacc
         if not self.fw_params['rx_only']:
             self.blocks['chanselect' ] =  self.chanselect
             self.blocks['mixer'      ] =  self.mixer
-            self.blocks['psb_chanselect' ] =  self.psb_chanselect
-            self.blocks['psb_offset_chanselect' ] =  self.psb_offset_chanselect
+            self.blocks['psb_chanselect'] =  self.psb_chanselect
             self.blocks['psb'        ] =  self.psb
-            self.blocks['psboffset'  ] =  self.psboffset
+            self.blocks['psbscale'   ] =  self.psbscale
             self.blocks['accumulator0' ] =  self.accumulators[0]
             self.blocks['accumulator1' ] =  self.accumulators[1]
 
@@ -476,7 +468,6 @@ class SoukMkidReadout():
         assert len(amplitudes) == n_tones
         chanmap_in = -1*np.ones(self.chanselect.n_chans_out, dtype=int)
         chanmap_psb = -1*np.ones(self.psb_chanselect.n_chans_out, dtype=int)
-        chanmap_psb_offset = -1*np.ones(self.psb_offset_chanselect.n_chans_out, dtype=int)
         lo_freqs_hz = np.zeros(n_tones, dtype=float)
         
         for fn, freq_hz in enumerate(freqs_hz):
@@ -486,45 +477,48 @@ class SoukMkidReadout():
             lo_freqs_hz[fn] = rx_freq_offset_hz
             ### Configure transmit side
             tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
-            # Even numbered bins are associated with the non-offset synth.
-            # Off bins are associated with the half-bin offset synth
-            use_offset_bank = bool(tx_nearest_bin % 2)
-            # Splitting the bins between banks means the index within a bank is halved
-            tx_nearest_bin = tx_nearest_bin // 2
-            if use_offset_bank:
-                chanmap_psb_offset[tx_nearest_bin] = fn
-            else:
-                chanmap_psb[tx_nearest_bin] = fn
+            chanmap_psb[tx_nearest_bin] = fn
         # Write input map
         self.chanselect.set_channel_outmap(chanmap_in)
         # Write mixer tones
         self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz)
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
-        self.psb_offset_chanselect.set_channel_outmap(chanmap_psb_offset)
 
-    def set_output_psb_scale(self, nshift, check_overflow=True):
+    def set_output_psb_scale(self, nshift, scale=1., check_overflow=True):
         """
         Set the PSB to scale down by 2^nshift in amplitude.
 
         :param nshift: Number of shift down stages in the PSB FFTs
         :type nshift: int
 
+        :param scale: Post PSB scaling factor
+        :type scale: float
+
         :param check_overflow: If True, warn about PSB overflow before returning.
         :type check_overflow: bool
+
+        :return: If check_overflow is set, return FENG_OK if no overflows are detected,
+            of FENG_ERROR otherwise. Return FENG_OK if check_overflow is not set.
+        :rtype: int
+
         """
         shift = 2**nshift - 1
-        for psb in [self.psb, self.psb_offset]:
-            psb.set_fftshift(shift)
+        self.psb.set_fftshift(shift)
+        self.psbscale.set_scale(scale)
         if not check_overflow:
-            return
-        psb_of = psb.get_overflow_count()
-        psboffset_of = psboffset.get_overflow_count()
+            return FENG_OK
+        rv = FENG_OK
+        psb_of = self.psb.get_overflow_count()
+        psbsum_of = self.psbscale.get_overflow_count()
         time.sleep(1)
-        if not psb.get_overflow_count == psb_of:
+        if not self.psb.get_overflow_count() == psb_of:
             self.logger.warning('PSB appears to be overflowing. Check psb.get_status() for more info')
-        if not psboffset.get_overflow_count == psb_of:
-            self.logger.warning('Offset PSB appears to be overflowing. Check psboffset.get_status() for more info')
+            rv = FENG_ERROR
+        if not psbsum_of == 0:
+            self.logger.warning('PSB overflow when summing overlapped banks')
+            rv = FENG_ERROR
+        return rv
 
     def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0):
         """
@@ -545,10 +539,9 @@ class SoukMkidReadout():
         assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
         # Disable anywhere either synthesizer is already using this tone ID
         # TODO: is this the best behaviour?
-        for synth in [self.psb_chanselect, self.psb_offset_chanselect]:
-            chanmap = synth.get_channel_outmap()
-            for b in np.where(chanmap == tone_id)[0]:
-                synth.set_single_channel(b, -1)
+        chanmap = self.psb_chanselect.get_channel_outmap()
+        for b in np.where(chanmap == tone_id)[0]:
+            self.psb_chanselect.set_single_channel(b, -1)
         if freq_hz is None:
             return
         ### Configure receiving side
@@ -564,17 +557,6 @@ class SoukMkidReadout():
         ### Configure transmit side
         # Index of nearest bin
         tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
-        # Even numbered bins are associated with the non-offset synth.
-        # Off bins are associated with the half-bin offset synth
-        use_offset_bank = bool(tx_nearest_bin % 2)
-        # Splitting the bins between banks means the index within a bank is halved
-        tx_nearest_bin = tx_nearest_bin // 2
         # Get index of nearest bin, and place tone in this bin for relevant
         # synth bank.
-        if use_offset_bank:
-            self.logger.info("Using offset filter bank")
-            synth_reorder = self.psb_offset_chanselect
-        else:
-            self.logger.info("Using centered filter bank")
-            synth_reorder = self.psb_chanselect
-        synth_reorder.set_single_channel(tx_nearest_bin, tone_id)
+        self.psb_chanselect.set_single_channel(tx_nearest_bin, tone_id)

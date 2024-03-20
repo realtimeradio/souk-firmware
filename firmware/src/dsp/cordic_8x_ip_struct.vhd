@@ -6,6 +6,7 @@ entity cordic_8x_ip_struct is
   port (
     phase_inc : in std_logic_vector( 64-1 downto 0 );
     load  : in std_logic_vector( 1-1 downto 0 );
+    scale  : in std_logic_vector( 16-1 downto 0 );
     clk_1 : in std_logic;
     ce_1  : in std_logic;
     dout  : out std_logic_vector( 288-1 downto 0 )
@@ -17,6 +18,7 @@ architecture structural of cordic_8x_ip_struct is
     port (
       phase_inc  : in std_logic_vector( 64-1 downto 0 );
       load  : in std_logic_vector( 1-1 downto 0 );
+      scale  : in std_logic_vector( 16-1 downto 0 );
       clk   : in std_logic;
       dout  : out std_logic_vector( 288-1 downto 0 )
     );
@@ -27,6 +29,7 @@ begin
   port map (
     phase_inc => phase_inc, 
     load      => load, 
+    scale => scale,
     clk       => clk_1, 
     dout      => dout
   );

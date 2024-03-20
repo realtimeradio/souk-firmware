@@ -3,12 +3,27 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
+import scipy.signal
+
+def dpss(M):
+    NW=2.0
+    return scipy.signal.windows.dpss(M, NW, Kmax=None, sym=True, norm=None, return_ratios=False)
+
 NFFT = 4
 OS_FACTOR = 2
 PLOT_RANGE = NFFT
 NFREQ_TRIAL = 32*NFFT*OS_FACTOR
 
 PI = np.pi
+
+def plot_window(ntaps, window_func, offset=0):
+    
+    trange = np.linspace(-ntaps/2., ntaps/2., ntaps*NFFT)
+    sinc = np.sinc(trange)
+    window = window_func(ntaps*NFFT)
+    coeffs = sinc * window
+
+    plt.plot(coeffs, label=window_func)
 
 def plot_pfb(ntaps, window_func, offset=0):
     
@@ -47,14 +62,17 @@ def plot_pfb(ntaps, window_func, offset=0):
     plt.xlim(0,1)
     plt.ylim(-7, 3)
 
-for wf in [np.hanning]:
-    plt.figure()
+for wf in [np.hanning, dpss]:
+    fig = plt.figure()
+    fig.suptitle("%s" % wf)
     for taps in [8]:#np.arange(4,16+4,4):
         plot_pfb(taps, wf)
-    
+        #plot_window(taps, wf)
+    #continue
     plt.subplot(1,2,1)
     plt.legend()
     plt.subplot(1,2,2)
     plt.legend()
+plt.legend()
 plt.show()
 
