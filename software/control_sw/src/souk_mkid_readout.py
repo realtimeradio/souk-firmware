@@ -26,6 +26,7 @@ from .blocks import generator
 from .blocks import psbscale
 from .blocks import output
 from .blocks import common
+from .blocks import delay
 #from .blocks import packetizer
 #from .blocks import eth
 #from .blocks import corr
@@ -335,10 +336,12 @@ class SoukMkidReadout():
                                 )
             #: Control interface to Polyphase Synthesizer block
             self.psb           = pfb.Pfb(self._cfpga, f'{prefix}psb', fftshift=0b111)
-        #: Control interface to PSB scale block
-        self.psbscale      = psbscale.PsbScale(self._cfpga, f'{prefix}psb') # This is a hack because the scale doesn't have its own block
-        #: Control interface to Output Multiplex block
-        self.output        = output.Output(self._cfpga, f'{prefix}output')
+            #: Control interface to PSB scale block
+            self.psbscale      = psbscale.PsbScale(self._cfpga, f'{prefix}psb') # This is a hack because the scale doesn't have its own block
+            #: Control interface to Output Multiplex block
+            self.output        = output.Output(self._cfpga, f'{prefix}output')
+            #: Control interface to output Delay block
+            self.out_delay     = delay.Delay(self._cfpga, f'{prefix}outdelay')
 
         # The order here can be important, blocks are initialized in the
         # order they appear here
@@ -352,7 +355,6 @@ class SoukMkidReadout():
         self.blocks['pfb'        ] =  self.pfb
         self.blocks['pfbtvg'     ] =  self.pfbtvg
         self.blocks['autocorr'     ] =  self.autocorr
-        self.blocks['output'       ] =  self.output
         self.blocks['gen_cordic'   ] =  self.gen_cordic
         self.blocks['gen_lut'      ] =  self.gen_lut
         self.blocks['psbscale'     ] =  self.psbscale
@@ -366,6 +368,8 @@ class SoukMkidReadout():
             self.blocks['psbscale'   ] =  self.psbscale
             self.blocks['accumulator0' ] =  self.accumulators[0]
             self.blocks['accumulator1' ] =  self.accumulators[1]
+            self.blocks['output'       ] =  self.output
+            self.blocks['out_delay'    ] =  self.out_delay
 
     def initialize(self, read_only=False):
         """
