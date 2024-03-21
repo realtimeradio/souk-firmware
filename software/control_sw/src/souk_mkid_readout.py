@@ -104,8 +104,7 @@ class SoukMkidReadout():
         try:
             self._initialize_blocks()
         except:
-            self.logger.exception("Failed to initialize firmware blocks. "
-                                  "Maybe the board needs programming.")
+            self.logger.exception("Failed to initialize firmware blocks.")
 
     def is_connected(self):
         """
@@ -219,6 +218,9 @@ class SoukMkidReadout():
         prefix = f'p{self.pipeline_id}_'
         #: Control interface to high-level FPGA functionality
         self.fpga        = fpga.Fpga(self._cfpga, "")
+        if not self.fpga.is_programmed():
+            self.logger.info('Board is not programmed with valid firmware. Skipping block initialization')
+            return
         if not self.fpga.check_firmware_support():
             self.logger.error('Firmware not supported. Try reprogramming with self.program()')
             if not ignore_unsupported:
