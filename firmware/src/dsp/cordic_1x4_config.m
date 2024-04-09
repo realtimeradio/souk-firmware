@@ -15,6 +15,8 @@ function cordic_1x4_config(this_block)
   this_block.addSimulinkInport('phase_step');
   this_block.addSimulinkInport('phase_offset');
   this_block.addSimulinkInport('scale');
+  this_block.addSimulinkInport('phase_skew');
+
 
   this_block.addSimulinkOutport('sync_out');
   sync_out_port = this_block.port('sync_out');
@@ -43,6 +45,9 @@ function cordic_1x4_config(this_block)
     end
     if (this_block.port('rst').width ~= 1);
       this_block.setError('Input data type for port "rst" must have width=1.');
+    end
+    if (this_block.port('phase_skew').width ~= 32);
+      this_block.setError('Input data type for port "phase_skew" must have width=32.');
     end
   end  % if(inputTypesKnown)
   % -----------------------------

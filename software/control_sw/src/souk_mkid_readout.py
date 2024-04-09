@@ -300,6 +300,7 @@ class SoukMkidReadout():
                                 n_parallel_chans=1,
                                 phase_bp=31,
                                 phase_offset_bp=31,
+                                delay_phase_bp=15,
                                 n_scale_bits=12,
                             )
         if not self.fw_params['rx_only']:
@@ -461,6 +462,11 @@ class SoukMkidReadout():
             of floats between 0 and 1. If none is provided, amplitudes of 1.0
             are used.
         :type amplitudes: list of float
+
+        :param delay_ns: The delay, in ns, to apply to the LO in the RX path. This
+            is applied internally as a frequency-dependent phase rotation.
+        :type delay_ns: float
+
         """
 
         # Start with maps with everything disabled
@@ -487,7 +493,7 @@ class SoukMkidReadout():
         # Write input map
         self.chanselect.set_channel_outmap(chanmap_in)
         # Write mixer tones
-        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz)
+        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, delay_ns, self.adc_clk_hz)
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
 
@@ -526,7 +532,7 @@ class SoukMkidReadout():
             rv = FENG_ERROR
         return rv
 
-    def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0):
+    def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0, delay_ns=0.0):
         """
         Configure both TX and RX paths for a tone at frequency ``freq_hz``
         with ID ``tone_id``.
@@ -540,6 +546,11 @@ class SoukMkidReadout():
 
         :param phase_offset_rads: Phase offset of tone, in radians.
         :type phase_offset_rads: float
+
+        :param delay_ns: The delay, in ns, to apply to the LO in the RX path. This
+            is applied internally as a frequency-dependent phase rotation.
+        :type delay_ns: float
+
         """
 
         assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
@@ -558,7 +569,9 @@ class SoukMkidReadout():
         self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
                                  phase_offset=phase_offset_rads,
                                  sample_rate_hz=self.adc_clk_hz)
+        delay_phase = 2*np.pi * freqs_hz * delay_ns / 1e9
         self.mixer.set_amplitude_scale(tone_id, 1.0)
+        self.mixer.set_phase_skew(tone_id, delay_phase)
         
         ### Configure transmit side
         # Index of nearest bin

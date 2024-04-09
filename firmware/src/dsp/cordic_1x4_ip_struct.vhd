@@ -6,6 +6,7 @@ entity cordic_1x4_ip_struct is
   port (
     phase_step : in std_logic_vector( 32-1 downto 0 );
     phase_offset : in std_logic_vector( 32-1 downto 0 );
+    phase_skew : in std_logic_vector( 32-1 downto 0 );
     scale : in std_logic_vector( 32-1 downto 0 );
     sync  : in std_logic_vector( 1-1 downto 0 );
     rst  : in std_logic_vector( 1-1 downto 0 );
@@ -22,6 +23,7 @@ architecture structural of cordic_1x4_ip_struct is
     port (
       phase_step : in std_logic_vector( 32-1 downto 0 );
       phase_offset : in std_logic_vector( 32-1 downto 0 );
+      phase_skew : in std_logic_vector( 32-1 downto 0 );
       scale : in std_logic_vector( 32-1 downto 0 );
       sync  : in std_logic_vector( 1-1 downto 0 );
       rst  : in std_logic_vector( 1-1 downto 0 );
@@ -37,6 +39,7 @@ begin
   port map (
     phase_step => phase_step, 
     phase_offset => phase_offset, 
+    phase_skew => phase_skew,
     scale    => scale, 
     rst      => rst, 
     sync     => sync, 

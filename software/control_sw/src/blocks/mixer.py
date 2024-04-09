@@ -1,6 +1,7 @@
 import struct
 import numpy as np
 from .block import Block
+from ..helpers import cplx2uint, uint2cplx
 
 class Mixer(Block):
     """
@@ -31,6 +32,15 @@ class Mixer(Block):
     :param phase_bp: Number of phase fractional bits
     :type phase_bp: int
 
+    :param phase_offset_bp: Number of phase_offset fractional bits
+    :type phase_offset_bp: int
+
+    :param delay_phase_bp: Number of delay_phase fractional bits
+    :type delay_phase_bp: int
+
+    :param n_scale_bits: Number of bits in scale multiplier
+    :type n_scale_bits: int
+
     """
     def __init__(self, host, name,
             n_chans=4096,
@@ -39,6 +49,7 @@ class Mixer(Block):
             n_parallel_chans=4,
             phase_bp=31,
             phase_offset_bp=31,
+            delay_phase_bp=15,
             n_scale_bits=8,
             logger=None):
         super(Mixer, self).__init__(host, name, logger)
@@ -50,6 +61,7 @@ class Mixer(Block):
         self._n_serial_chans = n_chans // n_parallel_chans
         self._phase_bp = phase_bp
         self._phase_offset_bp = phase_offset_bp
+        self._delay_phase_bp = delay_phase_bp
         self._n_scale_bits = n_scale_bits
 
     def enable_power_mode(self):
@@ -130,7 +142,7 @@ class Mixer(Block):
         """
         Apply an amplitude scaling <=1 to an output channel.
 
-        :param chan: The channel index to which this phase-rate should be applied
+        :param chan: The channel index to which this amplitude should be applied
         :type chan: int
 
         :param scaling: optional scaling (<=1) to apply to the output tone amplitude.
@@ -142,6 +154,42 @@ class Mixer(Block):
         assert scale >= 0
         scale = self._format_amp_scale(scale)
         self.write_int(regname, scale, word_offset=s)
+
+    def set_phase_skew(self, chan, phase=0.0):
+        """
+        Apply a phase skew between TX and RX paths.
+        The RX LO is multiplied by the provided phase before being used
+        to mix the received data stream.
+
+        :param chan: The channel index to which this phase-rotation should be applied
+        :type chan: int
+
+        :param phase: Phase, in radians, by which the LO should be multiplied.
+        :type phase: float
+        """
+        p = chan % self._n_parallel_chans  # Parallel stream number
+        s = chan // self._n_parallel_chans # Serial channel position
+        regname = f'lo{p}_scale'
+        dc = np.cos(phase) + 1j*np.sin(phase)
+        d = cplx2uint(dc, self._n_delay_phase_bits)
+        self.write_int(regname, d, word_offset=s)
+
+    def get_phase_skew(self, chan):
+        """
+        Get the phase skew between TX and RX paths.
+        Get the phase being multiplied with the RX LO.
+
+        :param chan: The channel index to which this phase-rotation should be applied
+        :type chan: int
+
+        :return: Phase multiplier, in radians
+        :rtype: float
+        """
+        p = chan % self._n_parallel_chans  # Parallel stream number
+        s = chan // self._n_parallel_chans # Serial channel position
+        regname = f'lo{p}_scale'
+        d = uint2cplx(self.read_uint(regname, word_offset=s), self._n_delay_phase_bits)
+        return d
 
     def _format_phase_step(self, phase, phase_offset):
         """
@@ -234,7 +282,7 @@ class Mixer(Block):
         scale = self.read_uint(scale_regname, word_offset=s) / 2**self._n_scale_bits
         return inc_val, phase_offset, scale
 
-    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000):
+    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, delay_ns=0.0, sample_rate_hz=2500000000):
         """
         Configure the amplitudes, phases, and frequencies of multiple tones.
 
@@ -244,6 +292,10 @@ class Mixer(Block):
         :param phase_offsets: The phase offsets at which oscillators should start,
             in units of radians.
         :type phase_offsets: np.ndarray
+
+        :param delay_ns: The delay, in ns, to apply to the LO in the RX path. This
+            is applied internally as a frequency-dependent phase rotation.
+        :type delay_ns: float
 
         :param scaling: optional scaling (<=1) to apply to the output tone
             amplitudes. If a single number, apply this scale to all tones.
@@ -268,15 +320,22 @@ class Mixer(Block):
         phase_steps = freqs_hz / fft_rbw_hz * 2 * np.pi
         phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
         scaling = self._format_amp_scale(scaling)
+        delay_phases = np.zeros(n_tone, dtype=complex)
+        delay_phases = 2*np.pi * freqs_hz * delay_ns / 1e9
         # format appropriately
         phase_steps = np.array(phase_steps, dtype='>i4')
         phase_offsets = np.array(phase_offsets, dtype='>i4')
         scaling = np.array(scaling, dtype='>u4')
+        delay_ri = np.zeros(n_tone, dtype='>i2')
+        delay_ri[0::2] = np.cos(delay_phases) * 2**self._delay_phase_bp
+        delay_ri[1::2] = np.sine(delay_phases) * 2**self._delay_phase_bp
+        delay_ri_uint = delay_ri.view('>u4')
         for i in range(min(self._n_parallel_chans, n_tone)):
             regprefix = f'lo{i}'
             self.write(regprefix + '_scale', scaling[i::self._n_parallel_chans].tobytes())
             self.write(regprefix + '_phase_inc', phase_steps[i::self._n_parallel_chans].tobytes())
             self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
+            self.write(regprefix + '_phase_skew', delay_ri_uint[i::self._n_parallel_chans].tobytes())
 
     def initialize(self, read_only=False):
         """
