@@ -38,7 +38,7 @@ begin
   cordic_1x4_ip_inst : cordic_1x4
   port map (
     phase_step => phase_step, 
-    ri_step => phase_step, 
+    ri_step => ri_step, 
     phase_offset => phase_offset, 
     scale    => scale, 
     rst      => rst, 
