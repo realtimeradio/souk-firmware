@@ -50,40 +50,22 @@ class Rfdc(Block):
     def _get_core_status(self):
         """
         Get the underlying RFDC firmware module's status flags.
-        This is a wrapper around the katcp `rfdc-status` call.
         """
-        t = self.host.transport
-        timeout = t._timeout
-        reply, informs = t.katcprequest(name='rfdc-status', request_timeout=timeout)
         status = {}
         flags = {}
-        for i in informs:
-           s = i.arguments[0].decode()
-           # Strings look like:
-           # ADC0: Enabled 1, State: 15 PLL: 1
-           # ADC1: Enabled 0
-           # ADC2: Enabled 0
-           # ADC3: Enabled 0
-           # DAC0: Enabled 1, State: 15 PLL: 1
-           # DAC1: Enabled 0
-           # DAC2: Enabled 0
-           # DAC3: Enabled 0
-           dev = s.split(',')[0].split(':')[0] # E.g. "ADC0"
-           enabled = bool(int(s.split(',')[0].split()[-1]))
-           status[f"{dev}_enabled"] = enabled
-           # only get further flags for enabled devices
-           if not enabled:
-               continue
-           s1 = s.split(',')[1].split() # E.g. ['State:', '15', 'PLL:', '1']
-           state_flag = int(s1[1])
-           pll_flag = int(s1[3])
-           status[f"{dev}_state"] = state_flag
-           if state_flag != 15:
-               flags[f"{dev}_state"] = FENG_ERROR
-           status[f"{dev}_pll"] = pll_flag
-           if state_flag != 15:
-               flags[f"{dev}_pll"] = FENG_ERROR
-           
+        s = self.core.status()
+        for k0, v0 in s.items():
+            for k1, v1 in v0.items():
+                if k1 == 'Enabled':
+                    status[f"{k0}_enabled"] = bool(v1)
+                if k1 == 'State':
+                    status[f"{k0}_state"] = v1
+                    if v1 != 15:
+                        flags[f"{k0}_state"] = FENG_ERROR
+                if k1 == 'PLL':
+                    status[f"{k0}_pll"] = v1
+                    if v1 != 1:
+                        flags[f"{k0}_pll"] = FENG_ERROR
         return status, flags
 
     def get_status(self):
