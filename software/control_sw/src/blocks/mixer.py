@@ -145,7 +145,7 @@ class Mixer(Block):
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
-        regname = f'lo{p}_scale'
+        regname = f'rx_lo{p}_scale'
         assert scale >= 0
         scale = self._format_amp_scale(scale)
         self.write_int(regname, scale, word_offset=s)
@@ -234,9 +234,9 @@ class Mixer(Block):
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
-        inc_regname = f'lo{p}_phase_inc'
-        offset_regname = f'lo{p}_phase_offset'
-        scale_regname = f'lo{p}_scale'
+        inc_regname = f'rx_lo{p}_phase_inc'
+        offset_regname = f'rx_lo{p}_phase_offset'
+        scale_regname = f'rx_lo{p}_scale'
         # Increment-per-clock
         inc_val = self.read_int(inc_regname, word_offset=s) / 2**self._phase_bp * np.pi
         # Now phase offset
@@ -280,7 +280,7 @@ class Mixer(Block):
         ri_steps = np.cos(phase_steps) + 1j*np.sin(phase_steps)
         phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
         scaling = self._format_amp_scale(scaling)
-        ri_steps = [cplx2uint(ri_step) for ri_step in ri_steps]
+        ri_steps = [cplx2uint(ri_step, self._n_ri_step_bits) for ri_step in ri_steps]
         # format appropriately
         phase_steps = np.array(phase_steps, dtype='>i4')
         phase_offsets = np.array(phase_offsets, dtype='>i4')
