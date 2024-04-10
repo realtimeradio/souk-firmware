@@ -65,6 +65,12 @@ def cplx2uint(d, nbits):
     """
     real = int(np.round(d.real) * 2**(nbits-1))
     imag = int(np.round(d.imag) * 2**(nbits-1))
+    # Saturate
+    if real > 2**(nbits-1) - 1:
+        real = 2**(nbits-1) -1
+    if imag > 2**(nbits-1) - 1:
+        imag = 2**(nbits-1) -1
+    # interpret as uint
     if real < 0:
         real += 2**nbits
     if imag < 0:
