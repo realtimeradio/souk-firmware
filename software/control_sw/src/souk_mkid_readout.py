@@ -301,6 +301,7 @@ class SoukMkidReadout():
                                 phase_bp=31,
                                 phase_offset_bp=31,
                                 n_scale_bits=12,
+                                n_ri_step_bits=16,
                             )
         if not self.fw_params['rx_only']:
             #: Control interface to Accumulator Blocks

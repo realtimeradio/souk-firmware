@@ -1,6 +1,7 @@
 import struct
 import numpy as np
 from .block import Block
+from ..helpers import cplx2uint
 
 class Mixer(Block):
     """
@@ -31,6 +32,10 @@ class Mixer(Block):
     :param phase_bp: Number of phase fractional bits
     :type phase_bp: int
 
+    :param n_ri_step_bits: Number of bits in each of the real/image per-sample rotation
+        values.
+    :type n_ri_step_bits: int
+
     """
     def __init__(self, host, name,
             n_chans=4096,
@@ -40,6 +45,7 @@ class Mixer(Block):
             phase_bp=31,
             phase_offset_bp=31,
             n_scale_bits=8,
+            n_ri_step_bits=16,
             logger=None):
         super(Mixer, self).__init__(host, name, logger)
         self.n_chans = n_chans
@@ -51,6 +57,7 @@ class Mixer(Block):
         self._phase_bp = phase_bp
         self._phase_offset_bp = phase_offset_bp
         self._n_scale_bits = n_scale_bits
+        self._n_ri_step_bits = n_ri_step_bits
 
     def enable_power_mode(self):
         """
@@ -201,15 +208,19 @@ class Mixer(Block):
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
-        inc_regname = f'lo{p}_phase_inc'
-        offset_regname = f'lo{p}_phase_offset'
+        inc_regname = f'rx_lo{p}_phase_inc'
+        offset_regname = f'rx_lo{p}_phase_offset'
+        ri_step_regname = f'rx_lo{p}_ri_step'
         if phase is None:
+            phase = 0
             phase_scaled = 0
             phase_offset_scaled = 0
         else:
             phase_scaled, phase_offset_scaled = self._format_phase_step(phase, phase_offset)
+        ri_step_scaled = cplx2uint(np.cos(phase) + 1j*np.sin(phase), self._n_ri_step_bits)
         self.write_int(inc_regname, phase_scaled, word_offset=s)
         self.write_int(offset_regname, phase_offset_scaled, word_offset=s)
+        self.write_int(ri_step_regname, ri_step_scaled, word_offset=s)
  
     def get_phase_offset(self, chan):
         """
@@ -266,17 +277,21 @@ class Mixer(Block):
         fft_period_s = self._n_upstream_chans / self._upstream_oversample_factor / sample_rate_hz
         fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
         phase_steps = freqs_hz / fft_rbw_hz * 2 * np.pi
+        ri_steps = np.cos(phase_steps) + 1j*np.sin(phase_steps)
         phase_steps, phase_offsets = self._format_phase_step(phase_steps, phase_offsets)
         scaling = self._format_amp_scale(scaling)
+        ri_steps = [cplx2uint(ri_step) for ri_step in ri_steps]
         # format appropriately
         phase_steps = np.array(phase_steps, dtype='>i4')
         phase_offsets = np.array(phase_offsets, dtype='>i4')
         scaling = np.array(scaling, dtype='>u4')
+        ri_steps = np.array(ri_steps, dtype='>u4')
         for i in range(min(self._n_parallel_chans, n_tone)):
-            regprefix = f'lo{i}'
+            regprefix = f'rx_lo{i}'
             self.write(regprefix + '_scale', scaling[i::self._n_parallel_chans].tobytes())
             self.write(regprefix + '_phase_inc', phase_steps[i::self._n_parallel_chans].tobytes())
             self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
+            self.write(regprefix + '_ri_step', ri_steps[i::self._n_parallel_chans].tobytes())
 
     def initialize(self, read_only=False):
         """
