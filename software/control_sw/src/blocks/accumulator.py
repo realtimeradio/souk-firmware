@@ -42,6 +42,7 @@ class Accumulator(Block):
     :type dtype: str
 
     """
+    _N_GPIO = 4 # Number of GPIO counters
     def __init__(self, host, name,
                  logger=None,
                  acc_len=2**15,
@@ -119,17 +120,40 @@ class Accumulator(Block):
             self.logger.warning('Accumulation counter changed while reading data!')
         return dout
 
-    def get_new_spectra(self):
+    def get_new_spectra(self, gpio_count=[]):
         """
         Wait for a new accumulation to be ready then read it.
 
-        :return: Array of `self.n_chans` complex-values.
-        :rtype: numpy.ndarray
+        :param gpio_count: List of GPIO counter registers to return with the
+            accumulator data. E.g., [0,1,3] will return counters for pulse
+            edges on GPIOs 0, 1, and 3.
+
+        :return: If gpio_count=[], an array of `self.n_chans` complex-values.
+            If gpio_count is not an empty list, return the tuple (data, gpio_counters),
+            with gpio_values a list of the same length as gpio_count.
+        :rtype: numpy.ndarray[, gpio_counters]
 
         """
         self._wait_for_acc()
-        return self._read_bram()
+        d = self._read_bram()
+        if gpio_count == []:
+            return d
+        else:
+            counts = []
+            for i in gpio_count:
+                counts += [self.read_gpio_counter(i)]
+            return d, counts
 
+    def read_gpio_counter(self, n):
+        """
+        Read GPIO counter ``n``
+
+        :param n: GPIO counter to read
+        :type n: int
+        """
+        if n >= self._N_GPIO:
+            raise ValueError(f'Only {self._N_GPIO} GPIOs available')
+        return self.read_uint(f'gpio{n}')
 
     def plot_spectra(self, power=True, db=True, show=True, fftshift=False, sample_rate_hz=None):
         """
