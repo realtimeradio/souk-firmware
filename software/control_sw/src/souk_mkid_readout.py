@@ -408,13 +408,13 @@ class SoukMkidReadout():
             block.initialize(read_only=read_only)
         if not read_only:
             self.logger.info("Detecting and compensating RX vs TX pipeline skew")
-            self.mix.set_dependent_tx() # Share sync to compare propagation time
+            self.mixer.set_dependent_tx() # Share sync to compare propagation time
             self.sync.arm_sync()
             self.sync.sw_sync()
-            skew = self.get_rx_tx_skew()
+            skew = self.sync.get_pipeline_latency()
             self.sync.set_delay(skew)
             self.logger.info(f"Set sync delay to {skew} FPGA clocks")
-            self.mix.set_independent_tx() # Use delayed RX sync to compensate delay
+            self.mixer.set_independent_tx() # Use delayed RX sync to compensate delay
             self.logger.info("Performing software global reset")
             self.sync.arm_sync()
             self.sync.sw_sync()
