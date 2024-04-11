@@ -37,6 +37,11 @@ class Mixer(Block):
     :type n_ri_step_bits: int
 
     """
+    _IND_SYNC_OFFSET = 4
+    _IND_STEP_OFFSET = 3
+    _IND_OFFSET_OFFSET = 2
+    _IND_SCALE_OFFSET = 1
+    _IND_RI_STEP_OFFSET = 0
     def __init__(self, host, name,
             n_chans=4096,
             n_upstream_chans=8192,
@@ -133,7 +138,7 @@ class Mixer(Block):
         else:
             return v[0]
 
-    def set_amplitude_scale(self, chan, scale=1.0):
+    def set_amplitude_scale(self, chan, scale=1.0, los=['rx', 'tx']):
         """
         Apply an amplitude scaling <=1 to an output channel.
 
@@ -142,13 +147,20 @@ class Mixer(Block):
 
         :param scaling: optional scaling (<=1) to apply to the output tone amplitude.
         :type scaling: float
+
+        :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
+        :type los: list
+
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
-        regname = f'rx_lo{p}_scale'
         assert scale >= 0
         scale = self._format_amp_scale(scale)
-        self.write_int(regname, scale, word_offset=s)
+        for lo in los:
+            if lo not in ['rx', 'tx']:
+                raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
+            regname = f'{lo}_lo{p}_scale'
+            self.write_int(regname, scale, word_offset=s)
 
     def _format_phase_step(self, phase, phase_offset):
         """
@@ -189,7 +201,7 @@ class Mixer(Block):
         else:
             return phase_int[0], phase_offset_int[0]
 
-    def set_phase_step(self, chan, phase=None, phase_offset=0.0):
+    def set_phase_step(self, chan, phase=None, phase_offset=0.0, los=['rx', 'tx']):
         """
         Set the phase increment to apply on each successive sample for
         channel `chan`.
@@ -205,12 +217,12 @@ class Mixer(Block):
             in units of radians.
         :type phase: float
 
+        :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
+        :type los: list
+
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
-        inc_regname = f'rx_lo{p}_phase_inc'
-        offset_regname = f'rx_lo{p}_phase_offset'
-        ri_step_regname = f'rx_lo{p}_ri_step'
         if phase is None:
             phase = 0
             phase_scaled = 0
@@ -218,13 +230,22 @@ class Mixer(Block):
         else:
             phase_scaled, phase_offset_scaled = self._format_phase_step(phase, phase_offset)
         ri_step_scaled = cplx2uint(np.cos(phase) + 1j*np.sin(phase), self._n_ri_step_bits)
-        self.write_int(inc_regname, phase_scaled, word_offset=s)
-        self.write_int(offset_regname, phase_offset_scaled, word_offset=s)
-        self.write_int(ri_step_regname, ri_step_scaled, word_offset=s)
+        for lo in los:
+            if lo not in ['rx', 'tx']:
+                raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
+            inc_regname = f'{lo}_lo{p}_phase_inc'
+            offset_regname = f'{lo}_lo{p}_phase_offset'
+            ri_step_regname = f'{lo}_lo{p}_ri_step'
+            self.write_int(inc_regname, phase_scaled, word_offset=s)
+            self.write_int(offset_regname, phase_offset_scaled, word_offset=s)
+            self.write_int(ri_step_regname, ri_step_scaled, word_offset=s)
  
-    def get_phase_offset(self, chan):
+    def get_phase_offset(self, chan, lo='rx'):
         """
         Get the currently loaded phase increment being applied to channel `chan`.
+
+        :param lo: Which LO to read. 'rx' or 'tx'
+        :type lo: str
 
         :return: (phase_step, phase_offset, scale)
             A tuple containing the phase increment (in radians) being applied
@@ -234,9 +255,11 @@ class Mixer(Block):
         """
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
-        inc_regname = f'rx_lo{p}_phase_inc'
-        offset_regname = f'rx_lo{p}_phase_offset'
-        scale_regname = f'rx_lo{p}_scale'
+        if lo not in ['rx', 'tx']:
+            raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
+        inc_regname = f'{lo}_lo{p}_phase_inc'
+        offset_regname = f'{lo}_lo{p}_phase_offset'
+        scale_regname = f'{lo}_lo{p}_scale'
         # Increment-per-clock
         inc_val = self.read_int(inc_regname, word_offset=s) / 2**self._phase_bp * np.pi
         # Now phase offset
@@ -245,7 +268,7 @@ class Mixer(Block):
         scale = self.read_uint(scale_regname, word_offset=s) / 2**self._n_scale_bits
         return inc_val, phase_offset, scale
 
-    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000):
+    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000, los=['rx', 'tx']):
         """
         Configure the amplitudes, phases, and frequencies of multiple tones.
 
@@ -262,6 +285,9 @@ class Mixer(Block):
 
         :param sample_rate_hz: DAC sample rate, in Hz
         :type sample_rate_hz: float
+
+        :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
+        :type los: list
 
         """
         freqs_hz = np.array(freqs_hz, dtype=float)
@@ -287,11 +313,81 @@ class Mixer(Block):
         scaling = np.array(scaling, dtype='>u4')
         ri_steps = np.array(ri_steps, dtype='>u4')
         for i in range(min(self._n_parallel_chans, n_tone)):
-            regprefix = f'rx_lo{i}'
-            self.write(regprefix + '_scale', scaling[i::self._n_parallel_chans].tobytes())
-            self.write(regprefix + '_phase_inc', phase_steps[i::self._n_parallel_chans].tobytes())
-            self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
-            self.write(regprefix + '_ri_step', ri_steps[i::self._n_parallel_chans].tobytes())
+            for lo in los:
+                if lo not in ['rx', 'tx']:
+                    raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
+                regprefix = f'{lo}_lo{i}'
+                self.write(regprefix + '_scale', scaling[i::self._n_parallel_chans].tobytes())
+                self.write(regprefix + '_phase_inc', phase_steps[i::self._n_parallel_chans].tobytes())
+                self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
+                self.write(regprefix + '_ri_step', ri_steps[i::self._n_parallel_chans].tobytes())
+
+    def set_independent_tx(self, sync=True, offset=True, scale=True, step=True):
+        """
+        Set the TX LOs to use independent control signals from the RX LOs.
+
+        :param sync: If True, use an independent time sync input
+        :type sync: bool
+
+        :param offset: If True, use an independent phase offset
+        :type offset: bool
+
+        :param scale: If True, use an independent amplitude scale
+        :type scale: bool
+
+        :param step: If True, use an independent phase step
+        :type step: bool
+        """
+        if not sync:
+            if (offset or scale or step):
+                self.warning('Using non-shared sync, but sharing another control signal. This is unlikely to be what you want.')
+        ctrl = 0
+        ctrl += (int(sync) << self._IND_SYNC_OFFSET)
+        ctrl += (int(offset) << self._IND_OFFSET_OFFSET)
+        ctrl += (int(scale) << self._IND_SCALE_OFFSET)
+        ctrl += (int(step) << self._IND_STEP_OFFSET)
+        ctrl += (int(step) << self._IND_RI_STEP_OFFSET)
+        self.write_int('ind_tx', ctrl)
+
+    def set_dependent_tx(self, sync=True, offset=True, scale=True, step=True):
+        """
+        Set the TX LOs to use dependent control signals from the RX LOs.
+
+        :param sync: If True, use a shared time sync input
+        :type sync: bool
+
+        :param offset: If True, use a shared phase offset
+        :type offset: bool
+
+        :param scale: If True, use a shared amplitude scale
+        :type scale: bool
+
+        :param step: If True, use a shared phase step
+        :type step: bool
+        """
+        self.set_independent_tx(sync=not sync, offset=not offset, scale=not scale, step=not step)
+
+    def get_tx_independence(self):
+        """
+        Get the current sharing state of TX LO control signals.
+
+        Returns a dictionary, keyed by signal name, whose value is True
+        if the signal is independent from the RX pipeline. False if it is shared.
+
+        :return: independence dictionary
+        :rtype: dict
+        """
+        ctrl = self.read_uint('ind_tx')
+        rv = {}
+        rv['sync'] = bool(ctrl & (1 << self._IND_SYNC_OFFSET))
+        rv['step'] = bool(ctrl & (1 << self._IND_STEP_OFFSET))
+        rv['offset'] = bool(ctrl & (1 << self._IND_OFFSET_OFFSET))
+        rv['scale'] = bool(ctrl & (1 << self._IND_SCALE_OFFSET))
+        rv['ri_step'] = bool(ctrl & (1 << self._IND_RI_STEP_OFFSET))
+        return rv
+
+    def get_status(self):
+        return self.get_tx_independence(), {}
 
     def initialize(self, read_only=False):
         """
@@ -306,4 +402,5 @@ class Mixer(Block):
             pass
         else:
             self.disable_power_mode()
+            self.set_dependent_tx() # Default to sharing LO controls
             self.set_freqs(np.zeros(self.n_chans), np.zeros(self.n_chans), np.zeros(self.n_chans))
