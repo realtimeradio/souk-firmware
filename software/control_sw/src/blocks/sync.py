@@ -17,6 +17,9 @@ class Sync(Block):
     :param clk_hz: The FPGA clock rate at which the DSP fabric runs, in Hz.
     :type clk_hz: int
 
+    :param sync_delay: The initial delay to load for the delayed sync output in FPGA clock cycles
+    :type sync_delay: int
+
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
     """
@@ -34,7 +37,7 @@ class Sync(Block):
     OFFSET_ENABLE_LOOPBACK = 11
     OFFSET_ENABLE_ERR_FLAG = 12
 
-    def __init__(self, host, name, clk_hz=None, logger=None):
+    def __init__(self, host, name, clk_hz=None, sync_delay=1, logger=None):
         super(Sync, self).__init__(host, name, logger)
         self.clk_hz = clk_hz
 
@@ -42,6 +45,7 @@ class Sync(Block):
 
         self.sync_wait_timeout_limit_s = 1.2
         self.sync_wait_sleep_period_s = 0.0005
+        self._default_sync_delay = sync_delay
     
     def uptime(self):
         """
@@ -130,6 +134,38 @@ class Sync(Block):
                 self.logger.warning("Timed out waiting for sync pulse")
                 break
             time.sleep(self.sync_wait_sleep_period_s)
+
+    def set_delay(self, delay):
+        """
+        Set the delay of the delayed sync output
+
+        :param delay: Delay in FPGA clock cycles
+        :type delay: int
+        """
+        self.write_int('sync_delay', delay)
+
+    def get_delay(self):
+        """
+        Get the delay of the delayed sync output, in FPGA clock cycles
+
+        :return: Delay in FPGA clock cycles
+        :rtype: int
+        """
+        return self.read_uint('sync_delay')
+
+    def get_pipeline_latency(self):
+        """
+        Get the difference in arrival time of a sync pulse at the start of the RX chain
+        and at the end of the TX chain, in units of FPGA clock cycles.
+        Depending on the `mix` block signal sharing settings, this is either the total
+        latency (when the TX pipeline sync is shared with the RX pipeline sync) or
+        is the residual skew when the RX pipeline sync is a delayed copy of the TX sync.
+
+        :return: Sync time difference, in FPGA clock cycles
+        :rtype: int
+        """
+        return self.read_uint('pipeline_latency')
+
 
     #def wait_for_pps(self, timeout=2.0):
     #    """
@@ -450,6 +486,8 @@ class Sync(Block):
             - int_count (int) : The number of internal sync pulses since the FPGA
               was last programmed.
 
+            - sync_delay (int) : The number of FPGA clock cycles between the RX and TX sync pulses.
+
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
             status key-value pairs. flags_dict is
             a dictionary with all, or a sub-set, of the keys in `status_dict`. The values
@@ -460,6 +498,7 @@ class Sync(Block):
         flags = {}
         stats['uptime_fpga_clks'] = self.uptime()
         stats['period_fpga_clks'] = self.period()
+        stats['sync_delay'] = self.get_sync_delay()
         stats['ext_count'] = self.count_ext()
         stats['error_count'] = self.get_error_count()
         if stats['error_count'] != 0:
@@ -482,3 +521,4 @@ class Sync(Block):
             self.set_sync_active_high()
             self.enable_error_flag()
             self.reset_error_count()
+            self.set_delay(self._default_sync_delay)

@@ -56,3 +56,37 @@ def get_casper_fft_scramble(n_bit_fft, n_bit_parallel):
     for i,j in enumerate(descramble):
         scramble[j] = i
     return scramble
+
+def cplx2uint(d, nbits):
+    """
+    Convert a floating point real, imag pair
+    to a UFix<nbits>_<nbits-1> CASPER-standard
+    complex number.
+    """
+    real = int(np.round(d.real * 2**(nbits-1)))
+    imag = int(np.round(d.imag * 2**(nbits-1)))
+    # Saturate
+    if real > 2**(nbits-1) - 1:
+        real = 2**(nbits-1) -1
+    if imag > 2**(nbits-1) - 1:
+        imag = 2**(nbits-1) -1
+    # interpret as uint
+    if real < 0:
+        real += 2**nbits
+    if imag < 0:
+        imag += 2**nbits
+    return (real << nbits) + imag
+
+def uint2cplx(d, nbits):
+    """
+    Convert a CASPER-standard UFix<nbits>_<nbits-1>
+    complex number to a real, imag pair.
+    """
+    real = (d >> nbits) & (2**nbits-1)
+    imag = d & (2**nbits-1)
+    if real >= 2**(nbits-1):
+        real -= 2**nbits
+    if imag >= 2**(nbits-1):
+        imag -= 2**nbits
+    return (real + 1j*imag) / 2**(nbits-1)
+

@@ -301,6 +301,7 @@ class SoukMkidReadout():
                                 phase_bp=31,
                                 phase_offset_bp=31,
                                 n_scale_bits=12,
+                                n_ri_step_bits=16,
                             )
         if not self.fw_params['rx_only']:
             #: Control interface to Accumulator Blocks
@@ -373,6 +374,19 @@ class SoukMkidReadout():
             self.blocks['output'       ] =  self.output
             self.blocks['out_delay'    ] =  self.out_delay
 
+    def get_rx_tx_skew(self):
+        """
+        Get the difference in arrival time of a sync pulse at the start of the RX chain
+        and at the end of the TX chain, in units of FPGA clock cycles.
+        Depending on the `mix` block signal sharing settings, this is either the total
+        latency (when the TX pipeline sync is shared with the RX pipeline sync) or
+        is the residual skew when the RX pipeline sync is a delayed copy of the TX sync.
+
+        :return: Sync time difference, in FPGA clock cycles
+        :rtype: int
+        """
+        return self.fpga.read_uint(f'p{self.pipeline_id}_rx_tx_skew')
+
     def initialize(self, read_only=False):
         """
         Call the ```initialize`` methods of all underlying blocks, then
@@ -393,6 +407,14 @@ class SoukMkidReadout():
                 self.logger.info("Initializing block (writable): %s" % blockname)
             block.initialize(read_only=read_only)
         if not read_only:
+            self.logger.info("Detecting and compensating RX vs TX pipeline skew")
+            self.mixer.set_dependent_tx() # Share sync to compare propagation time
+            self.sync.arm_sync()
+            self.sync.sw_sync()
+            skew = self.sync.get_pipeline_latency()
+            self.sync.set_delay(skew)
+            self.logger.info(f"Set sync delay to {skew} FPGA clocks")
+            self.mixer.set_independent_tx() # Use delayed RX sync to compensate delay
             self.logger.info("Performing software global reset")
             self.sync.arm_sync()
             self.sync.sw_sync()

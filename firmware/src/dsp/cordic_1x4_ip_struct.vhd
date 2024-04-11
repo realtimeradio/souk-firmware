@@ -5,6 +5,7 @@ use xil_defaultlib.conv_pkg.all;
 entity cordic_1x4_ip_struct is
   port (
     phase_step : in std_logic_vector( 32-1 downto 0 );
+    ri_step : in std_logic_vector( 32-1 downto 0 );
     phase_offset : in std_logic_vector( 32-1 downto 0 );
     scale : in std_logic_vector( 32-1 downto 0 );
     sync  : in std_logic_vector( 1-1 downto 0 );
@@ -21,6 +22,7 @@ architecture structural of cordic_1x4_ip_struct is
   component cordic_1x4
     port (
       phase_step : in std_logic_vector( 32-1 downto 0 );
+      ri_step : in std_logic_vector( 32-1 downto 0 );
       phase_offset : in std_logic_vector( 32-1 downto 0 );
       scale : in std_logic_vector( 32-1 downto 0 );
       sync  : in std_logic_vector( 1-1 downto 0 );
@@ -36,6 +38,7 @@ begin
   cordic_1x4_ip_inst : cordic_1x4
   port map (
     phase_step => phase_step, 
+    ri_step => ri_step, 
     phase_offset => phase_offset, 
     scale    => scale, 
     rst      => rst, 
