@@ -37,11 +37,13 @@ class Mixer(Block):
     :type n_ri_step_bits: int
 
     """
+    # Control bit offsets
     _IND_SYNC_OFFSET = 4
     _IND_STEP_OFFSET = 3
     _IND_OFFSET_OFFSET = 2
     _IND_SCALE_OFFSET = 1
     _IND_RI_STEP_OFFSET = 0
+    _LO_OUTPUT_BP = 22 # Binary point position of phasors
     def __init__(self, host, name,
             n_chans=4096,
             n_upstream_chans=8192,
@@ -385,6 +387,37 @@ class Mixer(Block):
         rv['scale'] = bool(ctrl & (1 << self._IND_SCALE_OFFSET))
         rv['ri_step'] = bool(ctrl & (1 << self._IND_RI_STEP_OFFSET))
         return rv
+
+    def _get_lo_snapshot(self, n=None):
+        """
+        DEBUG FIRMWARE ONLY
+
+        Get the phase outputs of the TX LO
+
+        :param n: If provided, only return this channel's data
+        :type n: int
+
+        :return: Array of LO value vs time
+        :rtype: numpy.ndarray
+        """
+        try:
+            ss = self.host.snapshots[self.prefix + 'snapshot']
+        except AttributeError:
+            self.error("Can't find snapshot. Is this debug feature in the firmware?")
+            raise RuntimeError
+        raw, t = ss.read_raw()
+        dc = np.frombuffer(raw['data'], dtype='>i4') / self._LO_OUTPUT_BP
+        d = dc[0::2] + 1j*dc[1::2]
+        if n is None:
+            return d
+        nval = len(d) // self.n_chans
+        ntime = ss.width_bits // 64
+        out = []
+        for i in range(nval // ntime):
+            for j in range(ntime):
+                out += [d[i * self.n_chans * ntime + j]]
+        return np.array(out)
+
 
     def get_status(self):
         return self.get_tx_independence(), {}
