@@ -498,7 +498,7 @@ class Sync(Block):
         flags = {}
         stats['uptime_fpga_clks'] = self.uptime()
         stats['period_fpga_clks'] = self.period()
-        stats['sync_delay'] = self.get_sync_delay()
+        stats['sync_delay'] = self.get_delay()
         stats['ext_count'] = self.count_ext()
         stats['error_count'] = self.get_error_count()
         if stats['error_count'] != 0:
