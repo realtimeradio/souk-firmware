@@ -45,11 +45,11 @@ a single RFSoC board running LWA's F-Engine firmware. An example is below:
   # Print available block names
   print(sorted(f.blocks.keys()))
   # Returns (eg):
-  # ['rfdc', 'input', 'autocorr', 'pfb', 'pfbtvg', 'chanreorder', 'mix',
+  # ['adc_snapshot', 'rfdc', 'input', 'autocorr', 'pfb', 'pfbtvg', 'chanreorder', 'mix',
   # 'gen_lut', 'gen_cordic', 'output', 'accumulator0', 'accumulator1']
 
   # Grab some ADC data from the ADC
-  adc_data = f.input.get_adc_snapshot()
+  adc_data = f.adc_snapshot.get_adc_snapshot()
 
 Details of the methods provided by individual blocks are given in the next
 section.
