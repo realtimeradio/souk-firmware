@@ -212,15 +212,19 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 1, self.OFFSET_ARM_NOISE)
         self.change_reg_bits('ctrl', 0, self.OFFSET_ARM_NOISE)
 
-    def sw_sync(self):
+    def sw_sync(self, wait=True):
         """
         Issue a sync pulse from software. This will only do anything
         if appropriate arming commands have been made in advance.
+
+        :param wait: If True, wait 50ms for a sync to propagate before returning.
+        :type wait: bool
         """
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
-        time.sleep(0.2) # Ensure the sync has propagated
+        if wait:
+            time.sleep(0.05) # Ensure the sync has propagated
 
     #def set_output_sync_rate(self, mask):
     #    """
