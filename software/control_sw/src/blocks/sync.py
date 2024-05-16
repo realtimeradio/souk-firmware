@@ -164,8 +164,9 @@ class Sync(Block):
         :return: Sync time difference, in FPGA clock cycles
         :rtype: int
         """
-        return self.read_uint('pipeline_latency')
-
+        delay = self.get_delay()
+        latency = self.read_uint('pipeline_latency')
+        return latency - delay
 
     #def wait_for_pps(self, timeout=2.0):
     #    """

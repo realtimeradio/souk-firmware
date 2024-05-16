@@ -324,70 +324,6 @@ class Mixer(Block):
                 self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
                 self.write(regprefix + '_ri_step', ri_steps[i::self._n_parallel_chans].tobytes())
 
-    def set_independent_tx(self, sync=True, offset=True, scale=True, step=True):
-        """
-        Set the TX LOs to use independent control signals from the RX LOs.
-
-        :param sync: If True, use an independent time sync input
-        :type sync: bool
-
-        :param offset: If True, use an independent phase offset
-        :type offset: bool
-
-        :param scale: If True, use an independent amplitude scale
-        :type scale: bool
-
-        :param step: If True, use an independent phase step
-        :type step: bool
-        """
-        if not sync:
-            if (offset or scale or step):
-                self.warning('Using non-shared sync, but sharing another control signal. This is unlikely to be what you want.')
-        ctrl = 0
-        ctrl += (int(sync) << self._IND_SYNC_OFFSET)
-        ctrl += (int(offset) << self._IND_OFFSET_OFFSET)
-        ctrl += (int(scale) << self._IND_SCALE_OFFSET)
-        ctrl += (int(step) << self._IND_STEP_OFFSET)
-        ctrl += (int(step) << self._IND_RI_STEP_OFFSET)
-        self.write_int('ind_tx', ctrl)
-
-    def set_dependent_tx(self, sync=True, offset=True, scale=True, step=True):
-        """
-        Set the TX LOs to use dependent control signals from the RX LOs.
-
-        :param sync: If True, use a shared time sync input
-        :type sync: bool
-
-        :param offset: If True, use a shared phase offset
-        :type offset: bool
-
-        :param scale: If True, use a shared amplitude scale
-        :type scale: bool
-
-        :param step: If True, use a shared phase step
-        :type step: bool
-        """
-        self.set_independent_tx(sync=not sync, offset=not offset, scale=not scale, step=not step)
-
-    def get_tx_independence(self):
-        """
-        Get the current sharing state of TX LO control signals.
-
-        Returns a dictionary, keyed by signal name, whose value is True
-        if the signal is independent from the RX pipeline. False if it is shared.
-
-        :return: independence dictionary
-        :rtype: dict
-        """
-        ctrl = self.read_uint('ind_tx')
-        rv = {}
-        rv['sync'] = bool(ctrl & (1 << self._IND_SYNC_OFFSET))
-        rv['step'] = bool(ctrl & (1 << self._IND_STEP_OFFSET))
-        rv['offset'] = bool(ctrl & (1 << self._IND_OFFSET_OFFSET))
-        rv['scale'] = bool(ctrl & (1 << self._IND_SCALE_OFFSET))
-        rv['ri_step'] = bool(ctrl & (1 << self._IND_RI_STEP_OFFSET))
-        return rv
-
     def _get_lo_snapshot(self, n=None):
         """
         DEBUG FIRMWARE ONLY
@@ -419,9 +355,6 @@ class Mixer(Block):
         return np.array(out)
 
 
-    def get_status(self):
-        return self.get_tx_independence(), {}
-
     def initialize(self, read_only=False):
         """
         Initialize the block.
@@ -435,5 +368,4 @@ class Mixer(Block):
             pass
         else:
             self.disable_power_mode()
-            self.set_dependent_tx() # Default to sharing LO controls
             self.set_freqs(np.zeros(self.n_chans), np.zeros(self.n_chans), np.zeros(self.n_chans))

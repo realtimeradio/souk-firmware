@@ -426,13 +426,11 @@ class SoukMkidReadout():
             block.initialize(read_only=read_only)
         if not read_only:
             self.logger.info("Detecting and compensating RX vs TX pipeline skew")
-            self.mixer.set_dependent_tx() # Share sync to compare propagation time
             self.sync.arm_sync()
             self.sync.sw_sync()
             skew = self.sync.get_pipeline_latency()
             self.sync.set_delay(skew)
             self.logger.info(f"Set sync delay to {skew} FPGA clocks")
-            self.mixer.set_independent_tx() # Use delayed RX sync to compensate delay
             self.logger.info("Performing software global reset")
             self.sync.arm_sync()
             self.sync.sw_sync()
@@ -485,7 +483,7 @@ class SoukMkidReadout():
         tx_nearest_bin = np.argmin(np.abs(tx_freq_bins_offset_hz))
         return tx_nearest_bin
 
-    def set_multi_tone(self, freqs_hz, phase_offsets_rads=None, amplitudes=None):
+    def set_multi_tone(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx','tx']):
         """
         Configure both TX and RX paths for ``i`` tones at frequencies ``freqs_hz[i]``.
         Disables all tones except those provided.
@@ -501,6 +499,9 @@ class SoukMkidReadout():
             of floats between 0 and 1. If none is provided, amplitudes of 1.0
             are used.
         :type amplitudes: list of float
+
+        :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
+        :type los: list
         """
 
         # Start with maps with everything disabled
@@ -527,7 +528,7 @@ class SoukMkidReadout():
         # Write input map
         self.chanselect.set_channel_outmap(chanmap_in)
         # Write mixer tones
-        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz)
+        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz, los)
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
 
