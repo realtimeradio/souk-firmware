@@ -34,6 +34,7 @@ from .blocks import delay
 
 N_TONE = 2048 # Number of independent tones the design can generate
 N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
+ADC_FPGA_DEMUX_RATIO = 8 # ADC samples per FPGA clock
 N_RX_FFT = N_RX_OVERSAMPLE*4096 # Number of FFT points in RX channelizer 
 N_TX_FFT = 4096 # Number of FFT points in TX synthesizer (not including oversampling)
 
@@ -117,9 +118,22 @@ class SoukMkidReadout():
         helpers.file_exists(f, self.logger)
         try:
             self._cfpga.get_system_information(f)
+            self._get_adc_clk_hz()
         except:
             self.logger.exception(f"Failed to parse fpg file {f}")
             raise
+
+    def _get_adc_clk_hz(self):
+        """
+        Try to get the current ADC clock rate by examining
+        the FPGA fabric rate and multiplying by the expected demux ratio.
+        """
+        try:
+            rfdc = self._cfpga.adcs['rfdc']
+            fpga_clk_hz = int(rfdc.get_fabric_clk_freq(0, 'adc') * 1e6)
+            self.adc_clk_hz = fpga_clk_hz * ADC_FPGA_DEMUX_RATIO
+        except:
+            self.logger.warning('Tried to get adc_clk_hz and failed')
 
     def read_config(self, f):
         helpers.file_exists(f, self.logger)
@@ -133,7 +147,10 @@ class SoukMkidReadout():
         if fpgfile is not None and fpgfile.startswith('.'):
             fpgfile = path.realpath(path.join(path.dirname(f), fpgfile))
         self.fpgfile = fpgfile
-        self.adc_clk_hz = self.config.get('adc_clk_hz', None)
+        try:
+            self.adc_clk_hz = self.config['adc_clk_hz']
+        except KeyError:
+            pass
         if self.fpgfile is not None:
             self.read_fpg(self.fpgfile)
         
@@ -204,6 +221,7 @@ class SoukMkidReadout():
         realpath = path.realpath(self.fpgfile)
         self.logger.info(f"Programming with {realpath}")
         self._cfpga.upload_to_ram_and_program(realpath)
+        self._get_adc_clk_hz()
         self._initialize_blocks()
 
     def _initialize_blocks(self, ignore_unsupported=False):
