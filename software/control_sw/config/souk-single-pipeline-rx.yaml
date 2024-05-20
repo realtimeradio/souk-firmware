@@ -1,7 +1,7 @@
 hosts:
   - 10.11.11.11
 
-fpgfile: ../../../firmware/src/souk_single_pipeline_rx_krm/outputs/souk_single_pipeline_rx_krm_2023-09-24_1038.fpg
+fpgfile: ../../../firmware/src/souk_single_pipeline_rx_krm/outputs/souk_single_pipeline_rx_krm_2024-05-20_1711.fpg
 adc_clk_hz: 2457600000
 
 channelizer:
