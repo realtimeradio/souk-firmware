@@ -367,8 +367,10 @@ class WindowedAccumulator(Accumulator):
         self._window_dtype = window_dtype
         self._window_n_points = window_n_points
         self._max_reuse_bits = max_reuse_bits
+        assert np.log2(self._n_parallel_samples) % 1 == 0
+        self._n_parallel_sample_bits = int(np.log2(self._n_parallel_samples))
 
-    def write_window(self, window):
+    def _write_window(self, window):
         assert len(window) <= self._window_n_points
         coeffs = np.array(window)
         coeffs *= 2**self._window_bp
@@ -376,33 +378,68 @@ class WindowedAccumulator(Accumulator):
         self.write('window', coeffs.tobytes())
 
     def get_window(self, n=None):
+        """
+        Get the currently loaded window coefficients, duplicating as required
+        to match the behaviour of firmware.
+
+        :return: Vector of coefficients with length matching the number of samples
+            accumulated.
+        :rtype: np.ndarray
+        """
         nbytes = self._window_n_points * np.dtype(self._window_dtype).itemsize
         fullwind = np.frombuffer(self.read('window', nbytes), dtype=self._window_dtype)
-        if n is None:
-            n = int(np.ceil(self.get_acc_len() / 2**self.get_window_step()))
+        rep_factor = 2**self.get_window_step()
+        n = int(np.ceil(self.get_acc_len() / rep_factor))
         out = fullwind[0:n] / 2**self._window_bp
+        out = out.repeat(rep_factor)
         return out
 
     def set_window_step(self, n):
-        assert n <= self._max_reuse_bits
+        """
+        Set how many samples to step through the coefficient vector
+        with each new set of parallel samples.
+
+        :param n: 2^? Number of samples to step through each block of parallel samples.
+            This must be at least the number of parallel samples itself.
+        :type n: int
+        """
+        assert n <= self._max_reuse_bits + self._n_parallel_sample_bits
+        assert n >= self._n_parallel_sample_bits, 'Window step must be a multiple of parallel sample count'
+        n -= self._n_parallel_sample_bits
         self.write_int('window_shift', n)
 
     def get_window_step(self):
-        return self.read_uint('window_shift')
+        """
+        Get log2 of the number of samples stepped through the coefficient vector
+        with each new set of parallel samples.
+
+        :return: log2 step length
+        :rtype: int
+        """
+        return self.read_uint('window_shift') + self._n_parallel_sample_bits
 
     def set_window(self, windfunc=np.ones):
+        """
+        Set the filter window.
+
+        :param windfunc: A function which returns a vector of coefficients when
+            passed an argument `n` indicating the number of points in the window.
+            E.g. np.ones
+        :type windfunc: Function
+        """
         # Start with known state, to aid in future debugging
         coeffs = (np.zeros(self._window_n_points))
         acc_len = self.get_acc_len()
         # Need to reuse coeffs if acc_len is longer than number of window points
-        f = acc_len / self._window_n_points
-        reuse_factor_bits = max(0, int(np.ceil(np.log2(f))))
+        # factoring in that some accumulation is parallel
+        f = acc_len / self._n_parallel_samples / self._window_n_points
+        reuse_factor_bits = max(self._n_parallel_sample_bits, int(np.ceil(np.log2(f))))
         reuse_factor = 2**reuse_factor_bits
         self.set_window_step(reuse_factor_bits)
         n_coeffs = int(np.ceil(acc_len / reuse_factor))
         self.logger.info(f'Acclen {acc_len}; using {n_coeffs} points, with reuse factor {reuse_factor}')
-        coeffs[0:n_coeffs] = windfunc(n_coeffs)
-        self.write_window(coeffs)
+        coeffs[0:n_coeffs] = windfunc(acc_len)[0::reuse_factor]
+        self._write_window(coeffs)
 
     def get_status(self):
         """
@@ -434,5 +471,5 @@ class WindowedAccumulator(Accumulator):
         """
         super(WindowedAccumulator, self).initialize(read_only=read_only)
         if not read_only:
-            self.set_window_step(0)
-            self.write_window(np.ones(self._window_n_points))
+            self.set_window_step(self._n_parallel_sample_bits)
+            self._write_window(np.ones(self._window_n_points))
