@@ -11,6 +11,7 @@ from .error_levels import *
 from .blocks import fpga
 from .blocks import rfdc
 from .blocks import adc_snapshot
+from .blocks import dac_snapshot
 from .blocks import sync
 from .blocks import input
 from .blocks import pfb
@@ -265,6 +266,8 @@ class SoukMkidReadout():
         self.input       = input.Input(self._cfpga, f'{prefix}input')
         #: Control interface to ADC Snapshot block
         self.adc_snapshot = adc_snapshot.AdcSnapshot(self._cfpga, f'common_adc_ss')
+        #: Control interface to DAC Snapshot block
+        self.dac_snapshot = dac_snapshot.DacSnapshot(self._cfpga, f'common_dac_ss')
 
         #: Control interface to PFB block
         self.pfb         = pfb.Pfb(self._cfpga, f'{prefix}pfb',

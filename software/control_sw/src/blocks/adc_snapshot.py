@@ -42,10 +42,16 @@ class AdcSnapshot(Block):
         q = np.frombuffer(dq, dtype=self.dtype)
         return i + 1j*q
 
-
     def get_adc_snapshot(self):
         """
-        Get an ADC snapshot.
+        Same as `get_snapshot` for backwards compatibility
+        """
+        self.logger.info('get_adc_snapshot is deprecated. Please use get_snapshot')
+        return self.get_snapshot()
+
+    def get_snapshot(self):
+        """
+        Get a data snapshot.
 
         :return: numpy array of complex valued ADC samples
         :rtype: numpy.ndarray
@@ -56,17 +62,25 @@ class AdcSnapshot(Block):
 
     def plot_adc_snapshot(self, nsamples=None):
         """
-        Plot an ADC snapshot.
+        Same as `plot_snapshot` for backwards compatibility
+        """
+        self.logger.info('plot_adc_snapshot is deprecated. Please use plot_snapshot')
+        return self.plot_snapshot(nsamples=nsamples)
+
+    def plot_snapshot(self, nsamples=None):
+        """
+        Plot a data snapshot.
 
         :param nsamples: If provided, only plot this many samples
         :type nsamples: int
         """
         from matplotlib import pyplot as plt
-        x = self.get_adc_snapshot()
-        if nsamples is not None:
-            x = x[0:nsamples]
-        plt.plot(x.real, label='I')
-        plt.plot(x.imag, label='Q')
+        x2d = np.atleast_2d(self.get_snapshot())
+        for i in range(x.shape[0]):
+            if nsamples is not None:
+                x = x2d[i][0:nsamples]
+            plt.plot(x.real, label=f'I{i}')
+            plt.plot(x.imag, label=f'Q{i}')
         plt.legend()
         plt.ylabel('ADC counts')
         plt.xlabel('Sample Number')
@@ -74,20 +88,29 @@ class AdcSnapshot(Block):
 
     def plot_adc_spectrum(self, db=False):
         """
-        Plot a power spectrum of the ADC input stream using a simple FFT.
+        Same as `plot_spectrum` for backwards compatibility
+        """
+        self.logger.info('plot_adc_spectrum is deprecated. Please use plot_spectrum')
+        return plot_spectrum(db=db)
+
+    def plot_adc_spectrum(self, db=False):
+        """
+        Plot a power spectrum of a data snapshot using a simple FFT.
 
         :param db: If True, plot in dBs, else linear.
         :type db: bool
         """
         from matplotlib import pyplot as plt
-        x = self.get_adc_snapshot()
-        X = np.abs(np.fft.fft(x))**2
-        if db:
-            X = 10*np.log10(X)
-        plt.plot(np.fft.fftshift(X))
+        x2d = np.atleast_2d(self.get_snapshot())
+        for i in range(x.shape[0]):
+            X = np.abs(np.fft.fft(x))**2
+            if db:
+                X = 10*np.log10(X)
+            plt.plot(np.fft.fftshift(X), label=f'{i}')
         plt.xlabel('FFT bin (DC-centered)')
         if db:
             plt.ylabel('Power (dB; Arbitrary Reference)')
         else:
             plt.ylabel('Power (Linear, Arbitrary Reference)')
+        plt.legend()
         plt.show()
