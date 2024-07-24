@@ -101,7 +101,7 @@ class AdcSnapshot(Block):
         self.logger.info('plot_adc_spectrum is deprecated. Please use plot_spectrum')
         return plot_spectrum(db=db)
 
-    def plot_adc_spectrum(self, db=False, signals=None):
+    def plot_spectrum(self, db=False, signals=None):
         """
         Plot a power spectrum of a data snapshot using a simple FFT.
 
