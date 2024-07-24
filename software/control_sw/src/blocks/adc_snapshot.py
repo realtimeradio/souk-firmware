@@ -60,25 +60,33 @@ class AdcSnapshot(Block):
         self._trigger_snapshot()
         return self._read_samples()
 
-    def plot_adc_snapshot(self, nsamples=None):
+    def plot_adc_snapshot(self, nsamples=None, signals=None):
         """
         Same as `plot_snapshot` for backwards compatibility
         """
         self.logger.info('plot_adc_snapshot is deprecated. Please use plot_snapshot')
         return self.plot_snapshot(nsamples=nsamples)
 
-    def plot_snapshot(self, nsamples=None):
+    def plot_snapshot(self, nsamples=None, signals=None):
         """
         Plot a data snapshot.
 
         :param nsamples: If provided, only plot this many samples
         :type nsamples: int
+        
+        :param signals: List of signal IDs to plot. E.g., [0] to plot only the first signal.
+            If None, plot everything.
+        :type signals: list of int
         """
         from matplotlib import pyplot as plt
         x2d = np.atleast_2d(self.get_snapshot())
-        for i in range(x.shape[0]):
+        for i in range(x2d.shape[0]):
+            if signals is not None:
+                if i not in signals:
+                    continue
+            x = x2d[i]
             if nsamples is not None:
-                x = x2d[i][0:nsamples]
+                x = x[0:nsamples]
             plt.plot(x.real, label=f'I{i}')
             plt.plot(x.imag, label=f'Q{i}')
         plt.legend()
@@ -86,24 +94,31 @@ class AdcSnapshot(Block):
         plt.xlabel('Sample Number')
         plt.show()
 
-    def plot_adc_spectrum(self, db=False):
+    def plot_adc_spectrum(self, db=False, signals=None):
         """
         Same as `plot_spectrum` for backwards compatibility
         """
         self.logger.info('plot_adc_spectrum is deprecated. Please use plot_spectrum')
         return plot_spectrum(db=db)
 
-    def plot_adc_spectrum(self, db=False):
+    def plot_adc_spectrum(self, db=False, signals=None):
         """
         Plot a power spectrum of a data snapshot using a simple FFT.
 
         :param db: If True, plot in dBs, else linear.
         :type db: bool
+
+        :param signals: List of signal IDs to plot. E.g., [0] to plot only the first signal.
+            If None, plot everything.
+        :type signals: list of int
         """
         from matplotlib import pyplot as plt
         x2d = np.atleast_2d(self.get_snapshot())
-        for i in range(x.shape[0]):
-            X = np.abs(np.fft.fft(x))**2
+        for i in range(x2d.shape[0]):
+            if signals is not None:
+                if i not in signals:
+                    continue
+            X = np.abs(np.fft.fft(x2d[i]))**2
             if db:
                 X = 10*np.log10(X)
             plt.plot(np.fft.fftshift(X), label=f'{i}')
