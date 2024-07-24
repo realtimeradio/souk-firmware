@@ -395,6 +395,18 @@ class SoukMkidReadout():
             self.blocks['output'       ] =  self.output
             self.blocks['out_delay'    ] =  self.out_delay
 
+    def use_dual_dac(self):
+        """
+        Use dual DAC outputs, with 1 output for "even" frequency tones, and another for "odd".
+        """
+        self.fpga.write_int(f'p{self.pipeline_id}_use_dual_dac', 1)
+
+    def use_single_dac(self):
+        """
+        Use single DAC output, with "even" and "odd" frequency tones summed.
+        """
+        self.fpga.write_int(f'p{self.pipeline_id}_use_dual_dac', 0)
+
     def get_rx_tx_skew(self):
         """
         Get the difference in arrival time of a sync pulse at the start of the RX chain
@@ -428,6 +440,7 @@ class SoukMkidReadout():
                 self.logger.info("Initializing block (writable): %s" % blockname)
             block.initialize(read_only=read_only)
         if not read_only:
+            self.use_single_dac()
             self.logger.info("Detecting and compensating RX vs TX pipeline skew")
             self.sync.arm_sync()
             self.sync.sw_sync()
