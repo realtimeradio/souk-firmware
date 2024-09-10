@@ -10,6 +10,7 @@ entity cordic_1x4_ip_struct is
     scale : in std_logic_vector( 32-1 downto 0 );
     sync  : in std_logic_vector( 1-1 downto 0 );
     rst  : in std_logic_vector( 1-1 downto 0 );
+    phase_invert  : in std_logic_vector( 1-1 downto 0 );
     clk_1 : in std_logic;
     ce_1  : in std_logic;
     lo_out : out std_logic_vector( 192-1 downto 0 );
@@ -27,6 +28,7 @@ architecture structural of cordic_1x4_ip_struct is
       scale : in std_logic_vector( 32-1 downto 0 );
       sync  : in std_logic_vector( 1-1 downto 0 );
       rst  : in std_logic_vector( 1-1 downto 0 );
+      phase_invert  : in std_logic_vector( 1-1 downto 0 );
       clk : in std_logic;
       lo_out : out std_logic_vector( 192-1 downto 0 );
       lo_out_unscaled : out std_logic_vector( 192-1 downto 0 );
@@ -42,6 +44,7 @@ begin
     phase_offset => phase_offset, 
     scale    => scale, 
     rst      => rst, 
+    phase_invert => phase_invert, 
     sync     => sync, 
     clk      => clk_1, 
     lo_out   => lo_out,

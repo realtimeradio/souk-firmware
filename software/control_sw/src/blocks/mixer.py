@@ -53,6 +53,7 @@ class Mixer(Block):
             phase_offset_bp=31,
             n_scale_bits=8,
             n_ri_step_bits=16,
+            n_phase_slots=2**12,
             logger=None):
         super(Mixer, self).__init__(host, name, logger)
         self.n_chans = n_chans
@@ -65,6 +66,7 @@ class Mixer(Block):
         self._phase_offset_bp = phase_offset_bp
         self._n_scale_bits = n_scale_bits
         self._n_ri_step_bits = n_ri_step_bits
+        self.n_phase_slots = n_phase_slots
 
     def enable_power_mode(self):
         """
@@ -324,6 +326,59 @@ class Mixer(Block):
                 self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
                 self.write(regprefix + '_ri_step', ri_steps[i::self._n_parallel_chans].tobytes())
 
+    def set_phase_switch_pattern(self, pattern, spectra_per_step, los=['rx', 'tx']):
+        """
+        Set the phase switching pattern.
+
+        For a pattern (eg) [1, 0] The first `spectra_per_step` spectra will have LOs phase inverted,
+        the next `spectra_per_step` spectra will not be inverted, and then the pattern will reset.
+
+        The maximum number of slots in the pattern is `self.n_phase_slots`.
+
+        :param pattern: List or array of ones and zeros. One indicates that phase should be inverted
+            in this slot. 0 indicates phase should not be inverted.
+        :type pattern: list
+
+        :param spectra_per_step: The number of spectra to which each element of pattern should be applied.
+        :type spectra_per_step: int
+
+        :param los: List of LOs to modify. Can be ['rx'], ['tx'] or ['rx', 'tx']
+        :type los: list
+        """
+        n_slots_used = len(pattern)
+        assert n_slots_used <= self.n_phase_slots, f'Number of elements of `pattern` must be no more than {self.n_phase_slots}'
+        spectra_per_cycle = n_slots_used * spectra_per_step
+        pattern = np.array(pattern, dtype='>B')
+        assert np.all([x in [0,1] for x in pattern]), 'All pattern elements must be 1 or 0'
+
+        for lo in los:
+            if lo not in ['rx', 'tx']:
+                raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
+            self.write(f'{lo}_lo0_phase_inv_en', pattern.tobytes())
+            self.write_int(f'{lo}_lo0_last_spec_index_per_step', spectra_per_step-1)
+            self.write_int(f'{lo}_lo0_last_spec_index_cycle', spectra_per_cycle-1)
+
+    def get_phase_switch_pattern(self, lo='rx'):
+        """
+        Get the currently loaded phase switch pattern.
+
+        :param lo: Which LO to read. 'rx' or 'tx'
+        :type lo: str
+
+        :return: (phase pattern, spectra_per_step)
+            A tuple containing the phase pattern as an array of 1s and 0s,
+            and the number of spectra to which each phase is applied.
+        :rtype: (numpy.ndarray, int)
+        """
+        if lo not in ['rx', 'tx']:
+            raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
+        spectra_per_step = self.read_uint(f'{lo}_lo0_last_spec_index_per_step') + 1
+        spectra_per_cycle = self.read_uint(f'{lo}_lo0_last_spec_index_cycle') + 1
+        assert spectra_per_cycle % spectra_per_step == 0, 'This should not happen!'
+        n_steps = spectra_per_cycle // spectra_per_step
+        pattern = np.frombuffer(self.read(f'{lo}_lo0_phase_inv_en', n_steps), dtype='>B')
+        return pattern, spectra_per_step
+
     def _get_lo_snapshot(self, n=None):
         """
         DEBUG FIRMWARE ONLY
@@ -369,3 +424,4 @@ class Mixer(Block):
         else:
             self.disable_power_mode()
             self.set_freqs(np.zeros(self.n_chans), np.zeros(self.n_chans), np.zeros(self.n_chans))
+            self.set_phase_switch_pattern([0], 1024) # Don't do any phase switching
