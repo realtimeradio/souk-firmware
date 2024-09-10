@@ -17,6 +17,7 @@ function cordic_1x4_config(this_block)
   this_block.addSimulinkInport('scale');
   this_block.addSimulinkInport('ri_step');
   this_block.addSimulinkInport('phase_invert');
+  this_block.addSimulinkInport('blank');
 
   this_block.addSimulinkOutport('sync_out');
   sync_out_port = this_block.port('sync_out');
@@ -51,6 +52,9 @@ function cordic_1x4_config(this_block)
     end
     if (this_block.port('phase_invert').width ~= 1);
       this_block.setError('Input data type for port "phase_invert" must have width=1.');
+    end
+    if (this_block.port('blank').width ~= 1);
+      this_block.setError('Input data type for port "blank" must have width=1.');
     end
   end  % if(inputTypesKnown)
   % -----------------------------
