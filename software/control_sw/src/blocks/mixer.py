@@ -326,7 +326,7 @@ class Mixer(Block):
                 self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
                 self.write(regprefix + '_ri_step', ri_steps[i::self._n_parallel_chans].tobytes())
 
-    def set_phase_switch_pattern(self, pattern, spectra_per_step, los=['rx', 'tx']):
+    def set_phase_switch_pattern(self, pattern, spectra_per_step, los=['rx', 'tx'], n_blank=0):
         """
         Set the phase switching pattern.
 
@@ -344,19 +344,25 @@ class Mixer(Block):
 
         :param los: List of LOs to modify. Can be ['rx'], ['tx'] or ['rx', 'tx']
         :type los: list
+
+        :param n_blank: Number of spectra to blank before and after a phase switch transition
+        :type n_blank: int
         """
         n_slots_used = len(pattern)
         assert n_slots_used <= self.n_phase_slots, f'Number of elements of `pattern` must be no more than {self.n_phase_slots}'
         spectra_per_cycle = n_slots_used * spectra_per_step
-        pattern = np.array(pattern, dtype='>B')
+        pattern_full = np.zeros(self.n_phase_slots, dtype='>B')
+        pattern_full[0:n_slots_used] = pattern[:]
         assert np.all([x in [0,1] for x in pattern]), 'All pattern elements must be 1 or 0'
 
         for lo in los:
             if lo not in ['rx', 'tx']:
                 raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-            self.write(f'{lo}_lo0_phase_inv_en', pattern.tobytes())
+            self.write(f'{lo}_lo0_phase_inv_en', pattern_full.tobytes())
             self.write_int(f'{lo}_lo0_last_spec_index_per_step', spectra_per_step-1)
             self.write_int(f'{lo}_lo0_last_spec_index_cycle', spectra_per_cycle-1)
+            self.write_int(f'{lo}_lo0_last_spec_before_blank', self._n_serial_chans - 1 - n_blank)
+            self.write_int(f'{lo}_lo0_n_spectra_blank', n_blank)
 
     def get_phase_switch_pattern(self, lo='rx'):
         """
@@ -376,8 +382,8 @@ class Mixer(Block):
         spectra_per_cycle = self.read_uint(f'{lo}_lo0_last_spec_index_cycle') + 1
         assert spectra_per_cycle % spectra_per_step == 0, 'This should not happen!'
         n_steps = spectra_per_cycle // spectra_per_step
-        pattern = np.frombuffer(self.read(f'{lo}_lo0_phase_inv_en', n_steps), dtype='>B')
-        return pattern, spectra_per_step
+        pattern = np.frombuffer(self.read(f'{lo}_lo0_phase_inv_en', self.n_phase_slots), dtype='>B')
+        return pattern[0:n_steps], spectra_per_step
 
     def _get_lo_snapshot(self, n=None):
         """
