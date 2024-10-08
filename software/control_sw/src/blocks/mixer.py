@@ -185,7 +185,7 @@ class Mixer(Block):
         s = chan // self._n_parallel_chans # Serial channel position
         assert scale >= 0
         scale = self._format_amp_scale(scale)
-        word_base = self._CONTROL_N_WORDS * (buf * self.n_serial_chans + s)
+        word_base = self._CONTROL_N_WORDS * (buf * self._n_serial_chans + s)
         for lo in los:
             if lo not in ['rx', 'tx']:
                 raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
@@ -272,7 +272,7 @@ class Mixer(Block):
         else:
             phase_scaled, phase_offset_scaled = self._format_phase_step(phase, phase_offset)
         ri_step_scaled = cplx2uint(np.cos(phase) + 1j*np.sin(phase), self._n_ri_step_bits)
-        word_base = self._CONTROL_N_WORDS * (buf * self.n_serial_chans + s)
+        offset = 4 * self._CONTROL_N_WORDS * (buf * self._n_serial_chans + s)
         v = [0, 0, 0]
         for lo in los:
             if lo not in ['rx', 'tx']:
@@ -281,7 +281,7 @@ class Mixer(Block):
             v[self._PHASE_INC_WORD_OFFSET] = phase_scaled
             v[self._PHASE_OFFSET_WORD_OFFSET] = phase_offset_scaled
             v[self._RI_STEP_WORD_OFFSET] = ri_step_scaled
-            self.write(regname, struct.pack('>' + self._CONTROL_STRUCT_FORMAT[0:3], *v), word_offset=word_base)
+            self.write(regname, struct.pack('>' + self._CONTROL_STRUCT_FORMAT[0:3], *v), offset=offset)
 
     def get_current_buffer(self):
         """
