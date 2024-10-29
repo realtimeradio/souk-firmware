@@ -94,13 +94,18 @@ class Accumulator(Block):
             cnt1 = self.get_acc_cnt()
         return cnt1
 
-    def _read_bram(self):
+    def _read_bram(self, get_tt=False):
         """ 
         Read RAM containing accumulated spectra.
 
-        :return: Array of complex valued data, in int32 format. Array
+        :get_tt: If True, return timestamp corresponding to last sample of accumulation.
+        :type get_tt: Bool
+
+        :return: data, timestamp tuple
+            data is an array of complex valued data, in int32 format. Array
             dimensions are [FREQUENCY CHANNEL].
-        :rtype: numpy.array
+            timestamp is the accumulation timestamp, or None if get_tt is false.
+        :rtype: numpy.array, int
         """
         dout = np.zeros(self.n_chans, dtype=complex)
         start_acc_cnt = self.get_acc_cnt()
@@ -115,12 +120,16 @@ class Accumulator(Block):
                 dout[i::self._n_parallel_chans].imag = d[1::2]
             else:
                 dout[i::self._n_parallel_chans].real = d[:]
+        if get_tt:
+            tt = self.read_tt()
+        else:
+            tt = None
         stop_acc_cnt = self.get_acc_cnt()
         if start_acc_cnt != stop_acc_cnt:
             self.logger.warning('Accumulation counter changed while reading data!')
-        return dout
+        return dout, tt
 
-    def get_new_spectra(self, gpio_count=[]):
+    def get_new_spectra(self, gpio_count=[], get_tt=False):
         """
         Wait for a new accumulation to be ready then read it.
 
@@ -128,21 +137,25 @@ class Accumulator(Block):
             accumulator data. E.g., [0,1,3] will return counters for pulse
             edges on GPIOs 0, 1, and 3.
 
-        :return: If gpio_count=[], an array of `self.n_chans` complex-values.
-            If gpio_count is not an empty list, return the tuple (data, gpio_counters),
-            with gpio_values a list of the same length as gpio_count.
+        :get_tt: If True, return timestamp corresponding to last sample of accumulation.
+        :type get_tt: Bool
+
+        :return: spectra_data, gpio_counts, timestamp,
+            spectra_data is an array of `self.n_chans` complex-values.
+            If gpio_count is not an empty list gpio_values is a list
+            of the same length as gpio_count. Otherwise gpio_count is None
+            If get_tt, timestamp is the accumulation timestamp. Otherwise it is None
         :rtype: numpy.ndarray[, gpio_counters]
 
         """
         self._wait_for_acc()
-        d = self._read_bram()
-        if gpio_count == []:
-            return d
-        else:
+        d, timestamp  = self._read_bram(get_tt=get_tt)
+        counts = None
+        if gpio_count != []:
             counts = []
             for i in gpio_count:
                 counts += [self.read_gpio_counter(i)]
-            return d, counts
+        return d, counts, timestamp
 
     def read_gpio_counter(self, n):
         """
