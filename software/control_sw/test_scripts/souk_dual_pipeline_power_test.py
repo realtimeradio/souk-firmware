@@ -25,6 +25,8 @@ def main(host, fpgfile, ntones):
     p0.program(fpgfile)
     print(f"Instantiating pipeline 1")
     p1 = SoukMkidReadout(host, fpgfile=fpgfile, pipeline_id=1)
+    clk_mhz = p1.fpga.get_fpga_clock() / 1e6
+    print(f"FPGA clock rate is {clk_mhz:.1f} MHz")
 
     pipelines = [p0, p1]
 
