@@ -334,9 +334,9 @@ class Mixer(Block):
         # Increment-per-clock
         inc_val = self.read_int(regname, word_offset=word_base + self._PHASE_INC_WORD_OFFSET) / 2**self._phase_bp * np.pi
         # Now phase offset
-        phase_offset = self.read_int(offset_regname, word_offset=word_base + self._PHASE_OFFSET_WORD_OFFSET) / 2**self._phase_offset_bp * np.pi
+        phase_offset = self.read_int(regname, word_offset=word_base + self._PHASE_OFFSET_WORD_OFFSET) / 2**self._phase_offset_bp * np.pi
         # Finally scale
-        scale = self.read_uint(scale_regname, word_offset=word_base + self._SCALE_WORD_OFFSET) / 2**self._n_scale_bits
+        scale = self.read_uint(regname, word_offset=word_base + self._SCALE_WORD_OFFSET) / 2**self._n_scale_bits
         return inc_val, phase_offset, scale
 
     def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000, los=['rx', 'tx'], next_buf=False):
