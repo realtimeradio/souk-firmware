@@ -402,11 +402,12 @@ class Mixer(Block):
             v[self._PHASE_INC_WORD_OFFSET :: self._CONTROL_N_WORDS] = phase_steps_u[i::self._n_parallel_chans]
             v[self._PHASE_OFFSET_WORD_OFFSET :: self._CONTROL_N_WORDS] = phase_offsets_u[i::self._n_parallel_chans]
             v[self._RI_STEP_WORD_OFFSET :: self._CONTROL_N_WORDS] = ri_steps_u[i::self._n_parallel_chans]
+            offset = 4 * self._CONTROL_N_WORDS * (buf * self._n_serial_chans + i)
             for lo in los:
                 if lo not in ['rx', 'tx']:
                     raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
                 reg = f'{lo}_lo{i}_control'
-                self.write(reg, v.tobytes())
+                self.write(reg, v.tobytes(), offset=offset)
 
     def set_phase_switch_pattern(self, pattern, spectra_per_step, los=['rx', 'tx'], n_blank=0):
         """
