@@ -222,8 +222,9 @@ class SoukMkidReadout():
         realpath = path.realpath(self.fpgfile)
         self.logger.info(f"Programming with {realpath}")
         self._cfpga.upload_to_ram_and_program(realpath)
-        self._get_adc_clk_hz()
         self._initialize_blocks()
+        self.rfdc.initialize() # Required before attempting to read ADC clock
+        self._get_adc_clk_hz()
 
     def _initialize_blocks(self, ignore_unsupported=False):
         """
