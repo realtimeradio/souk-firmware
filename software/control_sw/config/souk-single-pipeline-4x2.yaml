@@ -2,12 +2,12 @@ hosts:
   - rfsoc4x2
 
 fpgfile: ./../../../firmware/src/souk_single_pipeline_4x2/outputs/souk_single_pipeline_4x2.fpg
-adc_clk_hz: 2457600000
+adc_clk_hz: 2048000000
 # Onboard ref:
 #lmkfile: rfsoc4x2_PL_122M88_REF_245M76.txt
 # External 10MHz ref on CLK_IN
 lmkfile: rfsoc4x2_PL_122M88_REF_245M76_10M_EXTREF.txt
-lmxfile: rfsoc4x2_LMX_REF_245M76_OUT_491M52.txt
+lmxfile: rfsoc4x2_LMX_REF_245M76_OUT_409M6.txt
 
 channelizer:
   fftshift: 0xffffffff
