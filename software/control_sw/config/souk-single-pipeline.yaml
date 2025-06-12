@@ -1,9 +1,0 @@
-hosts:
-  - zcu111
-
-fpgfile: /home/jackh/src/souk-firmware/firmware/src/souk_single_pipeline/outputs/souk_single_pipeline_2023-02-17_2322.fpg
-lmkfile: 122M88_PL_122M88_SYSREF_7M68_clk5_12M8.txt
-lmxfile: LMX_REF_122M88_OUT_245M76.txt
-
-channelizer:
-  fftshift: 0xffffffff
