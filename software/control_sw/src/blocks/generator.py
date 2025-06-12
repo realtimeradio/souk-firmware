@@ -98,6 +98,8 @@ class Generator(Block):
                         amplitude=None, round_freq=True, window=False):
         """
         Set an output to a CW tone at a specific frequency.
+        Frequency specified here does not take into account any digital mixers
+        downstream of this block.
 
         :param n: Which generator to target. Use -1 to mean "all"
         :type n: int

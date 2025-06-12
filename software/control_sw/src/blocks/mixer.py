@@ -44,6 +44,13 @@ class Mixer(Block):
     _IND_SCALE_OFFSET = 1
     _IND_RI_STEP_OFFSET = 0
     _LO_OUTPUT_BP = 22 # Binary point position of phasors
+    # Offsets of fields in control register
+    _SCALE_WORD_OFFSET = 3 # Must be 3
+    _PHASE_OFFSET_WORD_OFFSET = 2
+    _RI_STEP_WORD_OFFSET = 1
+    _PHASE_INC_WORD_OFFSET = 0
+    _CONTROL_N_WORDS = 4 # parallel words
+    _CONTROL_STRUCT_FORMAT = 'iIiI'
     def __init__(self, host, name,
             n_chans=4096,
             n_upstream_chans=8192,
@@ -91,7 +98,7 @@ class Mixer(Block):
         """
         return bool(self.read_int('power_en'))
 
-    def set_chan_freq(self, chan, freq_offset_hz=None, phase_offset=0, sample_rate_hz=2500000000):
+    def set_chan_freq(self, chan, freq_offset_hz=None, phase_offset=0, sample_rate_hz=2500000000, next_buf=False):
         """
         Set the frequency of output channel `chan`.
 
@@ -109,6 +116,12 @@ class Mixer(Block):
         :param sample_rate_hz: DAC sample rate, in Hz
         :type sample_rate_hz: float
 
+        :param next_buf: If False, write directly to the buffer currently being
+            read by the firmware. If True, write to the next buffer, leaving
+            the new parameters inactive until the buffer is switched
+            (eg. by `switch_current_buffer`). If 0 or 1, write to that buffer.
+        :type next_buf: bool or int
+
         """
         if freq_offset_hz is None:
             phase_step = None
@@ -116,7 +129,7 @@ class Mixer(Block):
             fft_period_s = self._n_upstream_chans / self._upstream_oversample_factor / sample_rate_hz
             fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
             phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
-        self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset)
+        self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset, next_buf=next_buf)
 
     def _format_amp_scale(self, v):
         """
@@ -142,7 +155,7 @@ class Mixer(Block):
         else:
             return v[0]
 
-    def set_amplitude_scale(self, chan, scale=1.0, los=['rx', 'tx']):
+    def set_amplitude_scale(self, chan, scale=1.0, los=['rx', 'tx'], next_buf=False):
         """
         Apply an amplitude scaling <=1 to an output channel.
 
@@ -155,16 +168,29 @@ class Mixer(Block):
         :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
         :type los: list
 
+        :param next_buf: If False, write directly to the buffer currently being
+            read by the firmware. If True, write to the next buffer, leaving
+            the new parameters inactive until the buffer is switched
+            (eg. by `switch_current_buffer`). If 0 or 1, write to that buffer.
+        :type next_buf: bool or int
+
         """
+        if next_buf in [0, 1]:
+            buf = next_buf
+        else:
+            buf = self.get_current_buffer()
+            if next_buf:
+                buf = (buf + 1) % 2
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         assert scale >= 0
         scale = self._format_amp_scale(scale)
+        word_base = self._CONTROL_N_WORDS * (buf * self._n_serial_chans + s)
         for lo in los:
             if lo not in ['rx', 'tx']:
                 raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-            regname = f'{lo}_lo{p}_scale'
-            self.write_int(regname, scale, word_offset=s)
+            regname = f'{lo}_lo{p}_control'
+            self.write_int(regname, scale, word_offset=word_base + self._SCALE_WORD_OFFSET)
 
     def _format_phase_step(self, phase, phase_offset):
         """
@@ -205,7 +231,7 @@ class Mixer(Block):
         else:
             return phase_int[0], phase_offset_int[0]
 
-    def set_phase_step(self, chan, phase=None, phase_offset=0.0, los=['rx', 'tx']):
+    def set_phase_step(self, chan, phase=None, phase_offset=0.0, los=['rx', 'tx'], next_buf=False):
         """
         Set the phase increment to apply on each successive sample for
         channel `chan`.
@@ -224,7 +250,19 @@ class Mixer(Block):
         :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
         :type los: list
 
+        :param next_buf: If False, write directly to the buffer currently being
+            read by the firmware. If True, write to the next buffer, leaving
+            the new parameters inactive until the buffer is switched
+            (eg. by `switch_current_buffer`). If 0 or 1, write to that buffer.
+        :type next_buf: bool
+
         """
+        if next_buf in [0, 1]:
+            buf = next_buf
+        else:
+            buf = self.get_current_buffer()
+            if next_buf:
+                buf = (buf + 1) % 2
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         if phase is None:
@@ -234,15 +272,44 @@ class Mixer(Block):
         else:
             phase_scaled, phase_offset_scaled = self._format_phase_step(phase, phase_offset)
         ri_step_scaled = cplx2uint(np.cos(phase) + 1j*np.sin(phase), self._n_ri_step_bits)
+        offset = 4 * self._CONTROL_N_WORDS * (buf * self._n_serial_chans + s)
+        v = [0, 0, 0]
         for lo in los:
             if lo not in ['rx', 'tx']:
                 raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-            inc_regname = f'{lo}_lo{p}_phase_inc'
-            offset_regname = f'{lo}_lo{p}_phase_offset'
-            ri_step_regname = f'{lo}_lo{p}_ri_step'
-            self.write_int(inc_regname, phase_scaled, word_offset=s)
-            self.write_int(offset_regname, phase_offset_scaled, word_offset=s)
-            self.write_int(ri_step_regname, ri_step_scaled, word_offset=s)
+            regname = f'{lo}_lo{p}_control'
+            v[self._PHASE_INC_WORD_OFFSET] = phase_scaled
+            v[self._PHASE_OFFSET_WORD_OFFSET] = phase_offset_scaled
+            v[self._RI_STEP_WORD_OFFSET] = ri_step_scaled
+            self.write(regname, struct.pack('>' + self._CONTROL_STRUCT_FORMAT[0:3], *v), offset=offset)
+
+    def get_current_buffer(self):
+        """
+        Get the current ping-pong buffer index (either 0 or 1) used for reading.
+
+        :return: Buffer index
+        :rtype: int
+        """
+        return self.read_uint('read_buf')
+
+    def set_current_buffer(self, buf_id):
+        """
+        Set the current ping-pong buffer index (either 0 or 1) used for reading.
+
+        :return: Buffer index
+        :rtype: int
+        """
+        assert buf_id in [0, 1], 'buf_id should be either 0 or 1'
+        self.write_int('read_buf', buf_id)
+
+    def switch_current_buffer(self):
+        """
+        Flip the current buffer by reading `get_current_buffer`, swapping 0 <-> 1
+        and writing to `set_current_buffer`
+        """
+        cur_buf = self.get_current_buffer()
+        next_buf = (cur_buf + 1) % 2
+        self.set_current_buffer(next_buf)
  
     def get_phase_offset(self, chan, lo='rx'):
         """
@@ -257,22 +324,22 @@ class Mixer(Block):
             and the scale factor being applied to this channel.
         :rtype: float
         """
+        cur_buf = self.get_current_buffer()
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         if lo not in ['rx', 'tx']:
             raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-        inc_regname = f'{lo}_lo{p}_phase_inc'
-        offset_regname = f'{lo}_lo{p}_phase_offset'
-        scale_regname = f'{lo}_lo{p}_scale'
+        regname = f'{lo}_lo{p}_control'
+        word_base = self._CONTROL_N_WORDS * (cur_buf * self._n_serial_chans + s)
         # Increment-per-clock
-        inc_val = self.read_int(inc_regname, word_offset=s) / 2**self._phase_bp * np.pi
+        inc_val = self.read_int(regname, word_offset=word_base + self._PHASE_INC_WORD_OFFSET) / 2**self._phase_bp * np.pi
         # Now phase offset
-        phase_offset = self.read_int(offset_regname, word_offset=s) / 2**self._phase_offset_bp * np.pi
+        phase_offset = self.read_int(regname, word_offset=word_base + self._PHASE_OFFSET_WORD_OFFSET) / 2**self._phase_offset_bp * np.pi
         # Finally scale
-        scale = self.read_uint(scale_regname, word_offset=s) / 2**self._n_scale_bits
+        scale = self.read_uint(regname, word_offset=word_base + self._SCALE_WORD_OFFSET) / 2**self._n_scale_bits
         return inc_val, phase_offset, scale
 
-    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000, los=['rx', 'tx']):
+    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000, los=['rx', 'tx'], next_buf=False):
         """
         Configure the amplitudes, phases, and frequencies of multiple tones.
 
@@ -293,7 +360,19 @@ class Mixer(Block):
         :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
         :type los: list
 
+        :param next_buf: If False, write directly to the buffer currently being
+            read by the firmware. If True, write to the next buffer, leaving
+            the new parameters inactive until the buffer is switched
+            (eg. by `switch_current_buffer`). If 0 or 1, write to that buffer.
+        :type next_buf: bool or int
+
         """
+        if next_buf in [0, 1]:
+            buf = next_buf
+        else:
+            buf = self.get_current_buffer()
+            if next_buf:
+                buf = (buf + 1) % 2
         freqs_hz = np.array(freqs_hz, dtype=float)
         n_tone = len(freqs_hz)
         phase_offsets = np.array(phase_offsets, dtype=float)
@@ -312,19 +391,23 @@ class Mixer(Block):
         scaling = self._format_amp_scale(scaling)
         ri_steps = [cplx2uint(ri_step, self._n_ri_step_bits) for ri_step in ri_steps]
         # format appropriately
-        phase_steps = np.array(phase_steps, dtype='>i4')
-        phase_offsets = np.array(phase_offsets, dtype='>i4')
-        scaling = np.array(scaling, dtype='>u4')
-        ri_steps = np.array(ri_steps, dtype='>u4')
+        phase_steps_u = np.array(phase_steps, dtype='>i4').view('>u4')
+        phase_offsets_u = np.array(phase_offsets, dtype='>i4').view('>u4')
+        scaling_u = np.array(scaling, dtype='>u4')
+        ri_steps_u = np.array(ri_steps, dtype='>u4')
+        # create a new array to put all control variable into in parallel
+        v = np.zeros(int(np.ceil(n_tone / self._n_parallel_chans)) * self._CONTROL_N_WORDS, dtype='>u4')
         for i in range(min(self._n_parallel_chans, n_tone)):
+            v[self._SCALE_WORD_OFFSET :: self._CONTROL_N_WORDS] = scaling_u[i::self._n_parallel_chans]
+            v[self._PHASE_INC_WORD_OFFSET :: self._CONTROL_N_WORDS] = phase_steps_u[i::self._n_parallel_chans]
+            v[self._PHASE_OFFSET_WORD_OFFSET :: self._CONTROL_N_WORDS] = phase_offsets_u[i::self._n_parallel_chans]
+            v[self._RI_STEP_WORD_OFFSET :: self._CONTROL_N_WORDS] = ri_steps_u[i::self._n_parallel_chans]
+            offset = 4 * self._CONTROL_N_WORDS * (buf * self._n_serial_chans + i)
             for lo in los:
                 if lo not in ['rx', 'tx']:
                     raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-                regprefix = f'{lo}_lo{i}'
-                self.write(regprefix + '_scale', scaling[i::self._n_parallel_chans].tobytes())
-                self.write(regprefix + '_phase_inc', phase_steps[i::self._n_parallel_chans].tobytes())
-                self.write(regprefix + '_phase_offset', phase_offsets[i::self._n_parallel_chans].tobytes())
-                self.write(regprefix + '_ri_step', ri_steps[i::self._n_parallel_chans].tobytes())
+                reg = f'{lo}_lo{i}_control'
+                self.write(reg, v.tobytes(), offset=offset)
 
     def set_phase_switch_pattern(self, pattern, spectra_per_step, los=['rx', 'tx'], n_blank=0):
         """

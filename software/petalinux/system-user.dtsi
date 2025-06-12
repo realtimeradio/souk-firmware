@@ -1,0 +1,58 @@
+/include/ "system-conf.dtsi"
+/ {
+	chosen {
+		bootargs = "earlycon clk_ignore_unused root=/dev/mmcblk1p2 rw rootwait cpuidle.off=1 console=ttyPS0,115200";
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&flash0 {
+        compatible = "micron,mt25qu512a","jedec,spi-nor";
+        spi-max-frequency = <40000000>;
+        reg = <0x0>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+};
+
+&sdhci0 {
+//      no-1-8-v;
+        bus-width = <8>;
+        cap-mmc-highspeed;
+        mmc-hs200-1_8v;
+};
+
+&sdhci1 {
+        no-1-8-v;
+};
+
+&spi0 {
+        #address-cells = <0x1>;
+        #size-cells = <0x0>;
+        /* Use the compatible "rohm,dh2228fv" to trigger spidev without kernel error. */
+        lmk04208: spi@0 {
+                compatible = "rohm,dh2228fv";
+                reg = <0>;
+                spi-max-frequency = <6250000>;
+        };
+};
+
+&spi1 {
+        #address-cells = <0x1>;
+        #size-cells = <0x0>;
+        /* Use the compatible "rohm,dh2228fv" to trigger spidev without kernel error.*/
+        plla: spi@0 {
+                compatible = "rohm,dh2228fv";
+                reg = <0>;
+                spi-max-frequency = <6250000>;
+        };
+        pllb: spi@1 {
+                compatible = "rohm,dh2228fv";
+                reg = <1>;
+                spi-max-frequency = <6250000>;
+        };
+        pllc: spi@2 {
+                compatible = "rohm,dh2228fv";
+                reg = <2>;
+                spi-max-frequency = <6250000>;
+        };
+};
