@@ -38,6 +38,7 @@ N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
 ADC_FPGA_DEMUX_RATIO = 8 # ADC samples per FPGA clock
 N_RX_FFT = N_RX_OVERSAMPLE*4096 # Number of FFT points in RX channelizer 
 N_TX_FFT = 4096 # Number of FFT points in TX synthesizer (not including oversampling)
+SYNC_DELAY = 5712 # TX vs RX skew as measured with firmware loopback
 
 FW_TYPE_PARAMS = {
         10: {
@@ -262,7 +263,7 @@ class SoukMkidReadout():
                                lmxfile=self.config.get('lmxfile', None),
                            )
         #: Control interface to Synchronization / Timing block
-        self.sync        = sync.Sync(self._cfpga, f'{prefix}sync')
+        self.sync        = sync.Sync(self._cfpga, f'{prefix}sync', sync_delay=SYNC_DELAY)
         #: Control interface to Input Multiplex block
         self.input       = input.Input(self._cfpga, f'{prefix}input')
         #: Control interface to ADC Snapshot block
@@ -408,18 +409,18 @@ class SoukMkidReadout():
         """
         self.fpga.write_int(f'p{self.pipeline_id}_use_dual_dac', 0)
 
-    def get_rx_tx_skew(self):
-        """
-        Get the difference in arrival time of a sync pulse at the start of the RX chain
-        and at the end of the TX chain, in units of FPGA clock cycles.
-        Depending on the `mix` block signal sharing settings, this is either the total
-        latency (when the TX pipeline sync is shared with the RX pipeline sync) or
-        is the residual skew when the RX pipeline sync is a delayed copy of the TX sync.
+    #def get_rx_tx_skew(self):
+    #    """
+    #    Get the difference in arrival time of a sync pulse at the start of the RX chain
+    #    and at the end of the TX chain, in units of FPGA clock cycles.
+    #    Depending on the `mix` block signal sharing settings, this is either the total
+    #    latency (when the TX pipeline sync is shared with the RX pipeline sync) or
+    #    is the residual skew when the RX pipeline sync is a delayed copy of the TX sync.
 
-        :return: Sync time difference, in FPGA clock cycles
-        :rtype: int
-        """
-        return self.fpga.read_uint(f'p{self.pipeline_id}_rx_tx_skew')
+    #    :return: Sync time difference, in FPGA clock cycles
+    #    :rtype: int
+    #    """
+    #    return self.fpga.read_uint(f'p{self.pipeline_id}_rx_tx_skew')
 
     def initialize(self, read_only=False):
         """
@@ -445,7 +446,8 @@ class SoukMkidReadout():
             self.logger.info("Detecting and compensating RX vs TX pipeline skew")
             self.sync.arm_sync()
             self.sync.sw_sync()
-            skew = self.sync.get_pipeline_latency()
+            #skew = self.sync.get_pipeline_latency()
+            skew = SYNC_DELAY
             self.sync.set_delay(skew)
             self.logger.info(f"Set sync delay to {skew} FPGA clocks")
             self.logger.info("Performing software global reset")
