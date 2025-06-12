@@ -2,7 +2,7 @@ hosts:
   - krm
 
 fpgfile: ./../../../firmware/src/souk_single_pipeline_krm/outputs/souk_single_pipeline_krm.fpg
-adc_clk_hz: 2457600000
+adc_clk_hz: 2048000000
 
 channelizer:
   fftshift: 0xffffffff
