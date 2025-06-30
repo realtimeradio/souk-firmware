@@ -112,7 +112,7 @@ ssh casper@10.11.11.11 # password is casper
   ```
 
 4. Install `tcpborphserver3`
-  ```
+  ```bash
   cd ~/src/souk-firmware/software/zynq
   cd katcp_devel/rfdc
   make clean
