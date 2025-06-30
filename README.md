@@ -86,3 +86,46 @@ By default, the provided image will configure the KRM board's Ethernet interface
 ```
 ssh casper@10.11.11.11 # password is casper
 ```
+
+# Installing/Upgrading RFSoC Software
+
+1. SSH into the RFSoC and activate an appropriate Python 3 environment
+  ```bash
+  ssh casper@<RFSoC Board IP
+  source ~/p38venv/bin/activate
+  ```
+
+2. Update source code
+  ```bash
+  cd ~/src/souk-firmware
+  git checkout main
+  git pull
+  git submodule update --recursive --init software/*
+  ```
+
+3. Install `casperfpga` and SOUK control library
+  ```bash
+  cd ~/src/souk-firmware/software/casperfpga
+  pip install .
+  cd ../control_sw
+  pip install .
+  ```
+
+4. Install `tcpborphserver3`
+  ```
+  cd ~/src/souk-firmware/software/zynq
+  cd katcp_devel/rfdc
+  make clean
+  make -f Makefile.Linux
+  cd ..
+  make clean 
+  RFSOC_PLATFORM=ZCU216 IS_RFSOC=1 make
+  sudo make install
+  cd tcpborphserver3
+  sudo make install
+  ```
+
+5. Reboot
+  ```bash
+  sudo reboot now
+  ```
