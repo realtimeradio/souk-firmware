@@ -168,6 +168,24 @@ class Sync(Block):
         latency = self.read_uint('pipeline_latency')
         return latency - delay
 
+    def get_drift(self):
+        """
+        Get the drift observed between the time determined by a counter reset on the
+        last `arm` call, and the internal telescope time, updated with `update_internal_time`
+        based on external synchronization pulses.
+
+        If the drift measurement changes during read, throw a RuntimeError.
+
+        :return: drift, in FPGA clock cycles
+        :rtype: int
+        """
+        msb = self.read_int('drift_msb')
+        lsb = self.read_uint('drift_lsb')
+        if self.read_int('drift_msb') != msb:
+            self.logger.error('Drift count MSBs changed during LSB read')
+            raise RuntimeError
+        return (msb * 2**32) + lsb
+
     #def wait_for_pps(self, timeout=2.0):
     #    """
     #    Block until a PPS has been received.
@@ -493,6 +511,8 @@ class Sync(Block):
 
             - sync_delay (int) : The number of FPGA clock cycles between the RX and TX sync pulses.
 
+            - drift (int) : The number of FPGA clock cycles of drift measured between the last SYNC and PPS
+
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
             status key-value pairs. flags_dict is
             a dictionary with all, or a sub-set, of the keys in `status_dict`. The values
@@ -506,6 +526,7 @@ class Sync(Block):
         stats['sync_delay'] = self.get_delay()
         stats['ext_count'] = self.count_ext()
         stats['error_count'] = self.get_error_count()
+        stats['drift'] = self.get_drift()
         if stats['error_count'] != 0:
             flags['error_count'] = FENG_WARNING
         return stats, flags
