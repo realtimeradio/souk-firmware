@@ -6,7 +6,6 @@ from souk_mkid_readout.error_levels import *
 class AdcSnapshot(Block):
     dtype = '>h'
     ADC_SS_TRIG_OFFSET = 1
-    NBYTE = 16 * 2**9 # Number of bytes in each of I and Q buffers
     def __init__(self, host, name, logger=None):
         """
         :param host: CasperFpga interface for host.
@@ -36,11 +35,21 @@ class AdcSnapshot(Block):
         :return: complex-valued array of ADC samples
         :rtype: numpy.ndarray
         """
-        di = self.read('i', self.NBYTE)
-        dq = self.read('q', self.NBYTE)
+        nbyte = self._get_n_bytes()
+        di = self.read('i', nbyte)
+        dq = self.read('q', nbyte)
         i = np.frombuffer(di, dtype=self.dtype)
         q = np.frombuffer(dq, dtype=self.dtype)
         return i + 1j*q
+
+    def _get_n_bytes(self):
+        """
+        Get the number of bytes in a snapshot
+
+        :return: Number of bytes in each I/Q snapshot
+        :rtype: int
+        """
+        return self.read('n_bytes')
 
     def get_adc_snapshot(self):
         """

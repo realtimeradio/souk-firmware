@@ -3,7 +3,6 @@ import numpy as np
 from .adc_snapshot import AdcSnapshot
 
 class DacSnapshot(AdcSnapshot):
-    NBYTE = 32 * 2**9 # Number of bytes in each of the buffers
     def _read_samples(self):
         """
         Read samples from the DAC data buffers.
@@ -11,8 +10,9 @@ class DacSnapshot(AdcSnapshot):
         :return: 2D complex-valued array of DAC samples
         :rtype: numpy.ndarray
         """
-        d0_raw = self.read('0', self.NBYTE)
-        d1_raw = self.read('1', self.NBYTE)
+        nbyte = self._get_n_bytes()
+        d0_raw = self.read('0', nbyte)
+        d1_raw = self.read('1', nbyte)
         d0iq = np.frombuffer(d0_raw, dtype=self.dtype)
         d1iq = np.frombuffer(d1_raw, dtype=self.dtype)
         d0 = d0iq[0::2] + 1j*d0iq[1::2]
