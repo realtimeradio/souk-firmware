@@ -49,7 +49,7 @@ class AdcSnapshot(Block):
         :return: Number of bytes in each I/Q snapshot
         :rtype: int
         """
-        return self.read('n_bytes')
+        return self.read_uint('n_bytes')
 
     def get_adc_snapshot(self):
         """
