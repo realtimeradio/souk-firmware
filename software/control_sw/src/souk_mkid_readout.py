@@ -120,7 +120,8 @@ class SoukMkidReadout():
         helpers.file_exists(f, self.logger)
         try:
             self._cfpga.get_system_information(f)
-            self._get_adc_clk_hz()
+            if self._cfpga.is_running():
+                self._get_adc_clk_hz()
         except:
             self.logger.exception(f"Failed to parse fpg file {f}")
             raise

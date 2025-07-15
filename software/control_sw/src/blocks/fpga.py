@@ -126,6 +126,8 @@ class Fpga(Block):
         :rtype: bool
 
         """
+        if not self.host.is_running():
+            return False
         try:
             self.listdev()
             return True
