@@ -280,6 +280,48 @@ class Accumulator(Block):
         ip = '.'.join(map(str, ip_octs))
         return ip
 
+    def is_burst_mode(self):
+        """
+        Query whether the block is in burst mode.
+
+        :return: True is in burst mode, else False
+        :rtype: bool
+        """
+        return bool(self.get_reg_bits('burst_mode', 1))
+
+    def set_burst_mode(self, is_burst):
+        """
+        Set or unset burst mode.
+
+        :param is_burst: True to enter burst mode, False to exit.
+        :type is_burst: bool
+        """
+        self.change_reg_bits('burst_mode', int(is_burst), 1)
+
+    def _trigger_burst(self):
+        """
+        Trigger collection of a new burst of samples
+        """
+        self.change_reg_bits('burst_mode', 0, 0)
+        self.change_reg_bits('burst_mode', 0, 1) # Edge sensitive
+
+    def get_new_burst(self):
+        """
+        Trigger the collection of a new burst of data, then read it.
+
+        :return: array of `self.n_chans` complex-values, representing consecutive samples in a burst.
+        :rtype: numpy.ndarray
+
+        """
+        c0 = self.get_acc_cnt()
+        self._trigger_burst()
+        c1 = self.get_acc_cnt()
+        if c0 != c1:
+            self.logger.warning('Accumulation count changed while arming')
+        self._wait_for_acc()
+        d, _ = self._read_bram(get_tt=get_tt)
+        return d
+
     def get_status(self):
         """
         Get status and error flag dictionaries.
@@ -287,6 +329,7 @@ class Accumulator(Block):
         Status keys:
 
             - acc_len (int) : Currently loaded accumulation length in number of spectra.
+            - burst_mode (bool) : True if the accumulator is in burst mode, else False
 
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
             status key-value pairs. flags_dict is
@@ -297,6 +340,7 @@ class Accumulator(Block):
         stats = {}
         flags = {}
         stats['acc_len'] = self.get_acc_len()
+        stats['burst_mode'] = self.is_burst_mode()
         if self._has_dest_ip:
             stats['dest_ip'] = self.get_dest_ip()
         return stats, flags
