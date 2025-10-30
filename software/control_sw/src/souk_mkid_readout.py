@@ -262,6 +262,7 @@ class SoukMkidReadout():
         self.rfdc        = rfdc.Rfdc(self._cfpga, 'rfdc',
                                lmkfile=self.config.get('lmkfile', None),
                                lmxfile=self.config.get('lmxfile', None),
+                               pipeline_id=self.pipeline_id,
                            )
         #: Control interface to Synchronization / Timing block
         self.sync        = sync.Sync(self._cfpga, f'{prefix}sync', sync_delay=SYNC_DELAY)

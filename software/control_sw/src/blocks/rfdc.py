@@ -24,10 +24,15 @@ class Rfdc(Block):
     :param lmxfile: LMX configuration file to load to board's PLL chip
     :type lmxfile: str
 
+    :param pipeline_id: Index of this pipeline. Used to figure out which
+        control port names are associated with this pipeline's ADC/DAC channels.
+    :type pipeline_id: int
+
     """
-    def __init__(self, host, name, logger=None, lmkfile=None, lmxfile=None):
+    def __init__(self, host, name, logger=None, lmkfile=None, lmxfile=None, pipeline_id=0):
         super(Rfdc, self).__init__(host, name, logger)
         self.core = self.host.adcs[name]
+        self.pipeline_id = pipeline_id
         if lmkfile is not None:
             self._check_clockfile_exists(lmkfile)
         if lmxfile is not None:
@@ -68,15 +73,64 @@ class Rfdc(Block):
                         flags[f"{k0}_pll"] = FENG_ERROR
         return status, flags
 
+    def reset_rts_flags(self, over_range=True, over_voltage=True):
+        """
+        Reset the RTS error flags.
+
+        :param over_range: If True, reset the over_range flag
+        :type over_range: bool
+
+        :param over_voltage: If True, reset the over_voltage flag
+        :type over_voltage: bool
+        """
+
+        f = 0
+        f += int(over_voltage) << 0
+        f += int(over_range)   << 1
+        self.write_int('rts_in%d' % self.pipeline_id, 0)
+        self.write_int('rts_in%d' % self.pipeline_id, f)
+        self.write_int('rts_in%d' % self.pipeline_id, 0)
+
+    def get_rts_flags(self):
+        """
+        Read RTS flags and return as a dictionary.
+
+        :return: Dictionary of status flags. See `get_status` for descriptions
+        """
+        v = self.read_uint('rts_out%d' % self.pipeline_id)
+        flags = {}
+        flags['rts_over_range']            = bool(v & (1<<5))
+        flags['rts_over_threshold1']       = bool(v & (1<<4))
+        flags['rts_over_threshold2']       = bool(v & (1<<3))
+        flags['rts_over_voltage']          = bool(v & (1<<2))
+        flags['rts_over_cm_over_voltage']  = bool(v & (1<<1))
+        flags['rts_over_cm_under_voltage'] = bool(v & (1<<0))
+        return flags
+
     def get_status(self):
         """
         Get status and error flag dictionaries.
+        See PG269 for RTS port definitions.
 
         Status keys:
 
             - lmkfile (str) : The name of the LMK configuration file being used.
 
             - lmxfile (str) : The name of the LMX configuration file being used.
+
+            - rts_over_range (bool) : True if signal has exceeded full scale ADC input.
+                Must be cleared manually.
+
+            - rts_over_threshold1 (bool) : Signal amplitude is above programmable threshold 1.
+
+            - rts_over_threshold2 (bool) : Signal amplitude is above programmable threshold 2.
+
+            - rts_over_voltage (bool) : True if signal has "far exceeded" input range.
+                Must be cleared manually.
+
+            - rts_cm_over_voltage (bool) : True if input signal common mode voltage is too high for  safe operation.
+
+            - rts_cm_under_voltage (bool) True if input signal common mode voltage is too low for safe operation.
 
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
             status key-value pairs. flags_dict is
@@ -87,6 +141,13 @@ class Rfdc(Block):
         stats, flags = self._get_core_status()
         stats['lmkfile'] = self.lmkfile
         stats['lmxfile'] = self.lmxfile
+
+        rts_flags = self.get_rts_flags()
+        for k,v in rts_flags.items():
+            stats[k] = v
+            if v:
+                flags[k] = FENG_WARNING
+
         if stats['lmkfile'] is None:
             flags['lmkfile'] = FENG_WARNING
         else:
