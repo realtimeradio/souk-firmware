@@ -357,7 +357,7 @@ class SoukMkidReadout():
         self.gen_lut       = generator.Generator(self._cfpga, f'common_lut_gen')
         if not self.fw_params['rx_only']:
             #: Control interface to Pre-Polyphase Synthesizer Reorder
-            self.psb_chanselect = chanreorder.ChanReorderMultiSampleIn(self._cfpga, f'{prefix}synth_input_reorder',
+            self.psb_chanselect = chanreorder.VaccReorderMultiSampleIn(self._cfpga, f'{prefix}synth_input_reorder',
                                     n_serial_chans_out = N_TONE // 4,
                                     n_parallel_chans_out=16,
                                     n_parallel_samples=4,
@@ -588,7 +588,7 @@ class SoukMkidReadout():
             rv = FENG_ERROR
         return rv
 
-    def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0):
+    def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0, amp=1.0):
         """
         Configure both TX and RX paths for a tone at frequency ``freq_hz``
         with ID ``tone_id``.
@@ -602,6 +602,9 @@ class SoukMkidReadout():
 
         :param phase_offset_rads: Phase offset of tone, in radians.
         :type phase_offset_rads: float
+
+        :param amp: Tone amplitude, (<=1.0)
+        :type amp: float
         """
 
         assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
@@ -620,7 +623,7 @@ class SoukMkidReadout():
         self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
                                  phase_offset=phase_offset_rads,
                                  sample_rate_hz=self.adc_clk_hz)
-        self.mixer.set_amplitude_scale(tone_id, 1.0)
+        self.mixer.set_amplitude_scale(tone_id, amp)
         
         ### Configure transmit side
         # Index of nearest bin

@@ -512,16 +512,15 @@ class ChanReorderMultiSampleIn(ChanReorder):
         nout = len(outmap)
 
         outchans = np.arange(self.n_chans_out)
-        # Which parallel path does a given output channel
-        # map to
-        block_id = (outchans // self.n_parallel_samples) % self._expansion_factor
+        # To which parallel path does a given output channel map?
+        block_id = (outchans // self.n_parallel_samples) % self._expansion_factor # I.e. which reorder block
         # Which serial position in this path does a channel map to
-        block_s_offset = (outchans // self.n_parallel_chans_out)
+        block_s_offset = (outchans // self.n_parallel_chans_out) # Serial position in _output_
         # Which parallel position in this word in this path
-        block_p_offset = (outchans % self.n_parallel_samples)
+        block_p_offset = (outchans % self.n_parallel_samples)    # Parallel position in _output_
 
         # Combined position in a block
-        block_offset = block_s_offset * self.n_parallel_samples + block_p_offset
+        block_offset = block_s_offset * self.n_parallel_samples + block_p_offset # I.e., serial position in _input_
 
         # We want the user-select channel to end up in position `block_offset` of the block `block_id`
         for i in range(nout):
@@ -602,6 +601,166 @@ class ChanReorderMultiSampleIn(ChanReorder):
         else:
             chan_order = (self.n_chans_in - 1) * np.ones(self.n_chans_out) # output all last channel
             self.set_channel_outmap(chan_order)
+
+class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
+    def set_channel_inmap(self, inmap):
+        """
+        Remap the channels such that input channel `i`
+        contributes to output channel `inmap[i]`
+
+        :param inmap: The mapping of input to output data. I.e.,
+            if `inmap[16] = 0` then input channel 16 will contribute to
+            output channel 0.
+        :type inmap: list
+        """
+        # default to sending to last output, which is rejected in firmware
+        serial_maps = (self.n_chans_in - 1) * np.ones([self._expansion_factor, self._reorder_depth])
+        inmap = np.array(inmap, dtype=int)
+        nin = len(inmap)
+
+        # Look at all possible output channels and figure out what their corresponding position in the input is
+        outchans = np.arange(self.n_chans_out)
+        # To which parallel path does a given output channel map?
+        block_id = (outchans // self.n_parallel_samples) % self._expansion_factor # I.e. which reorder block
+        # Which serial position in this path does a channel map to
+        block_s_offset = (outchans // self.n_parallel_chans_out) # Serial position in _output_
+        # Which parallel position in this word in this path
+        block_p_offset = (outchans % self.n_parallel_samples)    # Parallel position in _output_
+
+        # Combined position in a block
+        # I.e., serial position in _input_. Put an input in position block_offset[i] of block_id[i] and
+        # It will emerge as channel i
+        block_offset = block_s_offset * self.n_parallel_samples + block_p_offset 
+
+        # We want the user-select channel to end up in position `block_offset` of the block `block_id`
+        for i in range(nin):
+            serial_maps[block_id[inmap[i]], i] = block_offset[inmap[i]]
+
+        serial_maps = np.array(serial_maps, dtype=self._map_format)
+
+        for i in range(self._expansion_factor):
+            self.write(f'map{i}_{self._map_reg}', serial_maps[i].tobytes())
+
+    def set_channel_outmap(self, outmap):
+        """
+        Remap the channels such that the input channels `outmap[i]`
+        emerge in output channel `i`
+
+        :param outmap: The outmap to which data should be mapped. I.e., if
+            `outmap[0] = 16`, then the first channel out of the reorder block
+            will be the input channel indexed 16.
+            If `outmap[2] = [20,40]` then the third channel out of the reorder
+            block will correspond to input channels 20 and 40
+        :type outmap: list of int
+
+        """
+        # Make 2D list
+        outmap = list(outmap)
+        for i, v in enumerate(outmap):
+            if not isinstance(v, list):
+                outmap[i] = [v]
+        inmap = np.ones(self.n_chans_in, dtype=int) * (self.n_chans_out-1)
+        for i, v in enumerate(outmap):
+            for w in v:
+                if w < 0:
+                    pass
+                inmap[w] = i
+        self.set_channel_inmap(inmap)
+
+    def get_channel_inmap(self):
+        """
+        Get the currently loaded reorder map.
+
+        :return: The reorder map currently loaded. Entry `i` in this map
+            corresponds to the output channel to which input `i` contributes.
+        :rtype: list
+        """
+        # Read and decode the reorder memory contents into an array
+        nbytes = self._reorder_depth * np.dtype(self._map_format).itemsize
+        serial_maps = np.zeros([self._expansion_factor, self._reorder_depth])
+        for i in range(self._expansion_factor):
+            serial_maps[i] = np.frombuffer(self.read(f'map{i}_{self._map_reg}', nbytes), dtype=self._map_format)
+
+        # Which serial position in each path does a channel map to
+        block_s_offset = serial_maps // self.n_parallel_samples
+        # Which parallel position in this word in this path
+        block_p_offset = serial_maps % self.n_parallel_samples
+
+        outmap = np.zeros(self.n_chans_out, dtype=int)
+        for i in range(self._expansion_factor):
+            for j in range(self._reorder_depth):
+                s_off = j // self.n_parallel_samples
+                p_off = j % self.n_parallel_samples
+                outmap[i * self.n_parallel_samples + s_off*self.n_parallel_chans_out + p_off] = serial_maps[i, j]
+        return outmap
+        return list(super(VaccReorderMultiSampleIn, self).get_channel_outmap())
+
+    def get_channel_outmap(self):
+        """
+        Read the currently loaded reorder map.
+
+        :return: The reorder map currently loaded. Entry `i` in this map is the
+            list of input channel indices which contribute to output channel input `i`.
+        :rtype: list
+        """
+        inmap = self.get_channel_inmap()
+        outmap = [[] for _ in range(self.n_chans_out)]
+        for i, v in enumerate(inmap):
+            outmap[v] += [i]
+        # For consistency with other reorder blocks, use -1 to mean "not used". The last input channel
+        # is always unused
+        outmap[self.n_chans_in-1] = [-1]
+        for i, v in enumerate(outmap):
+            if v == []:
+                outmap[i] = [-1]
+        # If we can, return as a numpy array for API consistency.
+        # This won't work if multiple input channels are contributing to the same output
+        try:
+            return np.array(outmap, dtype=int).flatten()
+        except ValueError:
+            return outmap
+
+    def set_single_channel(self, outidx, inidx):
+        """
+        Set output channel number ``outidx`` to input number ``inidx``.
+        Do this by reading the total channel map, modifying a single entry,
+        and writing back.
+
+        Example usage:
+            # Set the first channel out of the reorder to 33
+            ```set_single_channel(0, 33)``
+
+        :param outidx: Index of output channel to set.
+        :type outidx: int
+
+        :param inidx: Input channel index to select.
+        :type inidx: int
+        """
+        self.logger.info(f'Setting single channel input {inidx} -> output {outidx}')
+        outmap = self.get_channel_outmap()
+        # If the output channel is undriven (driven by input -1)
+        # set it to be driven by the input index.
+        # Otherwise, add the input index to the list of other drivers
+        if outmap[outidx] == -1 or inidx == -1:
+            outmap[outidx] = inidx
+        else:
+            outmap[outidx] += [inidx]
+        self.set_channel_outmap(outmap)
+
+    def initialize(self, read_only=False):
+        """
+        Initialize the block.
+
+        :param read_only: If True, this method is a no-op. If False,
+            initialize the block with all input contributing to the last output channel
+            (which is discarded)
+        :type read_only: bool
+        """
+        if read_only:
+            pass
+        else:
+            chan_order = (self.n_chans_out - 1) * np.ones(self.n_chans_in)
+            self.set_channel_inmap(chan_order)
 
 class ChanReorderPS(ChanReorder):
     """
