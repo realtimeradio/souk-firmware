@@ -3,4 +3,4 @@ VALIDATE_HW_CHKSUM=1
 HARDWARE_PATH=/home/jackh/src/souk-firmware/firmware/src/souk_single_pipeline_krm/myproj/top.xsa
 HARDWARE_CHECKSUM=6138dc8ee3880e37236c110bcbe4b5bb
 YOCTO_SDK=895fbcce2f0a15ac1ff1fbc579359da1
-RFSCONFIG_CHKSUM=50da554400728f56d658d2d2d27ea0df
+RFSCONFIG_CHKSUM=734498097a9e0f39228efa48ced27630
