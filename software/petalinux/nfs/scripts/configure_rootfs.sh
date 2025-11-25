@@ -40,7 +40,11 @@ apt install -y \
 	cmake \
 	git \
 	i2c-tools \
-	nfs-common
+	nfs-common \
+    libsysfs2 \
+    libsysfs-dev \
+    zlib1g \
+    zlib1g-dev
 
 # Mount /home on this server's NFS
 ip=$(hostname -I | awk '{print $1}') # This server's IP
