@@ -319,7 +319,7 @@ class Accumulator(Block):
         if c0 != c1:
             self.logger.warning('Accumulation count changed while arming')
         self._wait_for_acc()
-        d, _ = self._read_bram(get_tt=get_tt)
+        d, _ = self._read_bram(get_tt=None)
         return d
 
     def get_status(self):
