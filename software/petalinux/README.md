@@ -30,8 +30,11 @@ The `pxelinux.cfg/default-arm-zynqmp` PXE configuration file determines which li
 An NFS server (whose address and rootfs path are specified in `pxelinux.cfg/default-arm-zynqmp` `APPEND` options) should serve a
 basic root filesystem.
 Scripts are provided in `nfs` to help construct this filesystem.
+
 **These scripts should be used with extreme caution**.
+
 The rootfs creation scripts download an Ubuntu root filesyttem, chroot into it, and customize by installing packages.
+
 **If the chroot fails, and commands intended for this filesystem are applied to the machine hosting the NFS, the results may be catastrophic**.
 
 All scripts mast be run as root. You may wish to `sudo su` and then manually run the scripts line by line to verify they are operating correctly. These scripts are far from having bulletproof error handling.
