@@ -105,9 +105,13 @@ class SoukMkidReadout():
             self.read_fpg(fpgfile)
         self.blocks = {}
         try:
-            self._initialize_blocks()
+            self._create_block_interfaces()
         except:
             self.logger.exception("Failed to initialize firmware blocks.")
+
+        # Lists of block names for initialization - excluding FPGA and RFDC as these are initialized separately
+        self._shared_block_names = ['common', 'sync', 'adc_snapshot', 'dac_snapshot', 'zoomfft', 'zoomacc', 'gen_cordic', 'gen_lut', 'autocorr']
+        self._pipeline_block_names = ['input', 'pfb', 'pfbtvg', 'chanselect', 'mixer', 'psb_chanselect', 'psb', 'psbscale', 'accumulator0', 'accumulator1', 'output', 'out_delay']
 
     def is_connected(self):
         """
@@ -208,6 +212,10 @@ class SoukMkidReadout():
         """
         Program an .fpg file to an FPGA. 
 
+        Creates software block interfaces after programming.
+
+        Initialises RFDC and reads ADC clock rate.
+
         :param fpgfile: The .fpg file to be loaded. Should be a path to a
             valid .fpg file. If None is given, `self.fpgfile`
             will be loaded. If this is None, RuntimeError is raised
@@ -224,13 +232,20 @@ class SoukMkidReadout():
         realpath = path.realpath(self.fpgfile)
         self.logger.info(f"Programming with {realpath}")
         self._cfpga.upload_to_ram_and_program(realpath)
-        self._initialize_blocks()
+        self._create_block_interfaces()
         self.rfdc.initialize() # Required before attempting to read ADC clock
         self._get_adc_clk_hz()
 
-    def _initialize_blocks(self, ignore_unsupported=False):
+    def _create_block_interfaces(self, ignore_unsupported=False):
         """
+
         Initialize firmware blocks, populating the ``blocks`` attribute.
+
+        Only creates the software interfaces. 
+        
+        Does not write to FPGA.
+
+        Does read fw_type from fpga; does listbof for rfdc clock files; and does read block_info from generators.
 
         :param ignore_unsupported: If True, try initializing all blocks even if the firmware
             version doesn't match that supported by this software.
@@ -262,6 +277,7 @@ class SoukMkidReadout():
         self.rfdc        = rfdc.Rfdc(self._cfpga, 'rfdc',
                                lmkfile=self.config.get('lmkfile', None),
                                lmxfile=self.config.get('lmxfile', None),
+                               pipeline_id=self.pipeline_id,
                            )
         #: Control interface to Synchronization / Timing block
         self.sync        = sync.Sync(self._cfpga, f'{prefix}sync', sync_delay=SYNC_DELAY)
@@ -356,7 +372,7 @@ class SoukMkidReadout():
         self.gen_lut       = generator.Generator(self._cfpga, f'common_lut_gen')
         if not self.fw_params['rx_only']:
             #: Control interface to Pre-Polyphase Synthesizer Reorder
-            self.psb_chanselect = chanreorder.ChanReorderMultiSampleIn(self._cfpga, f'{prefix}synth_input_reorder',
+            self.psb_chanselect = chanreorder.VaccReorderMultiSampleIn(self._cfpga, f'{prefix}synth_input_reorder',
                                     n_serial_chans_out = N_TONE // 4,
                                     n_parallel_chans_out=16,
                                     n_parallel_samples=4,
@@ -397,6 +413,11 @@ class SoukMkidReadout():
             self.blocks['accumulator1' ] =  self.accumulators[1]
             self.blocks['output'       ] =  self.output
             self.blocks['out_delay'    ] =  self.out_delay
+        
+        #these blocks were missing from the blocks dict earlier
+        self.blocks['common'     ] =  self.common
+        self.blocks['adc_snapshot'] =  self.adc_snapshot
+        self.blocks['dac_snapshot'] =  self.dac_snapshot    
 
     def use_dual_dac(self):
         """
@@ -425,6 +446,10 @@ class SoukMkidReadout():
 
     def initialize(self, read_only=False):
         """
+        Deprecated due to incompatibility with multiple pipelines: 
+        
+        Use initialize_shared_blocks and initialize_pipeline_blocks instead.
+
         Call the ```initialize`` methods of all underlying blocks, then
         optionally issue a software global reset.
 
@@ -432,6 +457,8 @@ class SoukMkidReadout():
             in a read_only manner, and skip software reset.
         :type read_only: bool
         """
+        self.logger.warning("initialize() is deprecated due to incompatibility with multiple pipelines. Use initialize_shared_blocks() and initialize_pipeline_blocks() instead.")
+    
         if not self.fpga.is_programmed():
             self.logger.info("Board is _NOT_ programmed")
             if not read_only:
@@ -454,6 +481,64 @@ class SoukMkidReadout():
             self.logger.info("Performing software global reset")
             self.sync.arm_sync()
             self.sync.sw_sync()
+
+    def initialize_shared_blocks(self, read_only=False):
+        """
+        Call the "initialize" methods of all shared blocks.
+
+        :param read_only: If True, call the underlying initialization methods
+            in a read_only manner, and skip software reset.
+        :type read_only: bool
+        """
+        if not self.fpga.is_programmed():
+            self.logger.info("Board is _NOT_ programmed")
+            if not read_only:
+                self.program() 
+        for blockname in self._shared_block_names:
+            block = self.blocks[blockname]
+            if read_only:
+                self.logger.info("Initializing shared block (read only): %s" % blockname)
+            else:
+                self.logger.info("Initializing block (writable): %s" % blockname)
+            block.initialize(read_only=read_only)
+
+
+    def initialize_pipeline_blocks(self, read_only=False):
+        """
+        Call the "initialize" methods of all pipeline-specific blocks.
+
+        Compensates Rx/Tx pipeline skew and performs software global reset after initialization.
+
+        :param read_only: If True, call the underlying initialization methods
+            in a read_only manner, and skip software reset.
+        :type read_only: bool
+        """
+        if not self.fpga.is_programmed():
+            self.logger.info("Board is _NOT_ programmed")
+            if not read_only:
+                self.program() 
+        for blockname in self._pipeline_block_names:
+            block = self.blocks[blockname]
+            if read_only:
+                self.logger.info("Initializing pipeline block (read only): p%d %s" % (self.pipeline_id, blockname))
+            else:
+                self.logger.info("Initializing pipeline block (writable): p%d %s" % (self.pipeline_id, blockname))
+            block.initialize(read_only=read_only)
+        if not read_only:
+            self.use_single_dac()
+            self.logger.info("Detecting and compensating RX vs TX pipeline skew, p%d" % self.pipeline_id)
+            self.sync.arm_sync()
+            self.sync.sw_sync()
+            #skew = self.sync.get_pipeline_latency()
+            skew = SYNC_DELAY
+            self.sync.set_delay(skew)
+            self.logger.info(f"Set sync delay to {skew} FPGA clocks, p%d" % self.pipeline_id)
+            self.logger.info("Performing software global reset, p%d" % self.pipeline_id)
+            self.sync.arm_sync()
+            self.sync.sw_sync()
+
+
+
 
     def reset_psb_outputs(self):
         """
