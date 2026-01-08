@@ -238,7 +238,7 @@ class SoukMkidReadout():
 
     def _create_block_interfaces(self, ignore_unsupported=False):
         """
-        Initialize firmware blocks, populating the ``blocks`` attribute.
+        Create software interfaces for firmware blocks, populating the ``blocks`` attribute.
 
         Only creates the software interfaces. 
         
