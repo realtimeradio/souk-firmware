@@ -110,8 +110,8 @@ class SoukMkidReadout():
             self.logger.exception("Failed to initialize firmware blocks.")
 
         # Lists of block names for initialization - excluding FPGA and RFDC as these are initialized separately
-        self._shared_block_names = ['common', 'sync', 'adc_snapshot', 'dac_snapshot', 'zoomfft', 'zoomacc', 'gen_cordic', 'gen_lut', 'autocorr']
-        self._pipeline_block_names = ['input', 'pfb', 'pfbtvg', 'chanselect', 'mixer', 'psb_chanselect', 'psb', 'psbscale', 'accumulator0', 'accumulator1', 'output', 'out_delay']
+        self._shared_block_names = ['common', 'adc_snapshot', 'dac_snapshot', 'zoomfft', 'zoomacc', 'gen_cordic', 'gen_lut', 'autocorr']
+        self._pipeline_block_names = ['sync', 'input', 'pfb', 'pfbtvg', 'chanselect', 'mixer', 'psb_chanselect', 'psb', 'psbscale', 'accumulator0', 'accumulator1', 'output', 'out_delay']
 
     def is_connected(self):
         """
@@ -214,7 +214,7 @@ class SoukMkidReadout():
 
         Creates software block interfaces after programming.
 
-        Initialises RFDC and reads ADC clock rate.
+        Initializes RFDC and reads ADC clock rate.
 
         :param fpgfile: The .fpg file to be loaded. Should be a path to a
             valid .fpg file. If None is given, `self.fpgfile`
@@ -450,7 +450,7 @@ class SoukMkidReadout():
         
         Use initialize_shared_blocks and initialize_pipeline_blocks instead.
 
-        Call the ```initialize`` methods of all underlying blocks, then
+        Call the ``initialize`` methods of all underlying blocks, then
         optionally issue a software global reset.
 
         :param read_only: If True, call the underlying initialization methods
@@ -499,7 +499,7 @@ class SoukMkidReadout():
             if read_only:
                 self.logger.info("Initializing shared block (read only): %s" % blockname)
             else:
-                self.logger.info("Initializing block (writable): %s" % blockname)
+                self.logger.info("Initializing shared block (writable): %s" % blockname)
             block.initialize(read_only=read_only)
 
 
@@ -518,7 +518,11 @@ class SoukMkidReadout():
             if not read_only:
                 self.program() 
         for blockname in self._pipeline_block_names:
-            block = self.blocks[blockname]
+            try:
+                block = self.blocks[blockname]
+            except KeyError:
+                self.logger.info("Skipping block p%d %s because it doesn't exist" % (self.pipeline_id, blockname))
+                continue
             if read_only:
                 self.logger.info("Initializing pipeline block (read only): p%d %s" % (self.pipeline_id, blockname))
             else:
@@ -532,13 +536,10 @@ class SoukMkidReadout():
             #skew = self.sync.get_pipeline_latency()
             skew = SYNC_DELAY
             self.sync.set_delay(skew)
-            self.logger.info(f"Set sync delay to {skew} FPGA clocks, p%d" % self.pipeline_id)
-            self.logger.info("Performing software global reset, p%d" % self.pipeline_id)
+            self.logger.info(f"Set sync delay to {skew} FPGA clocks, p{self.pipeline_id}")
+            self.logger.info(f"Performing software global reset, p{self.pipeline_id}")
             self.sync.arm_sync()
             self.sync.sw_sync()
-
-
-
 
     def reset_psb_outputs(self):
         """
