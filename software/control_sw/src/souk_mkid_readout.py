@@ -238,7 +238,6 @@ class SoukMkidReadout():
 
     def _create_block_interfaces(self, ignore_unsupported=False):
         """
-
         Initialize firmware blocks, populating the ``blocks`` attribute.
 
         Only creates the software interfaces. 
@@ -414,10 +413,10 @@ class SoukMkidReadout():
             self.blocks['output'       ] =  self.output
             self.blocks['out_delay'    ] =  self.out_delay
         
-        #these blocks were missing from the blocks dict earlier
+        # These blocks were missing from the blocks dict earlier
         self.blocks['common'     ] =  self.common
         self.blocks['adc_snapshot'] =  self.adc_snapshot
-        self.blocks['dac_snapshot'] =  self.dac_snapshot    
+        self.blocks['dac_snapshot'] =  self.dac_snapshot
 
     def use_dual_dac(self):
         """
@@ -495,7 +494,11 @@ class SoukMkidReadout():
             if not read_only:
                 self.program() 
         for blockname in self._shared_block_names:
-            block = self.blocks[blockname]
+            try:
+                block = self.blocks[blockname]
+            except KeyError:
+                self.logger.info("Skipping shared block p%d %s because it doesn't exist" % (self.pipeline_id, blockname))
+                continue
             if read_only:
                 self.logger.info("Initializing shared block (read only): %s" % blockname)
             else:
