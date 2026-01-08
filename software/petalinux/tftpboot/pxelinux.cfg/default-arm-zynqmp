@@ -1,0 +1,11 @@
+DEFAULT zynqmp
+PROMPT 0
+TIMEOUT 3
+
+LABEL zynqmp
+    KERNEL zynqmp/image-zynqmp-initramfs-custom.ub
+    #KERNEL zynqmp/image-zynqmp-initramfs.ub
+    #KERNEL zynqmp/image-zynqmp.ub
+    #APPEND rdinit=/usr/bin/initshell.sh root=/dev/nfs nfsroot=10.11.0.198:/exports/ubuntu-24.04.3-arm64,v3,ro ip=dhcp
+    APPEND rdinit=/usr/bin/initoverlay.sh root=/dev/nfs nfsroot=10.11.0.198:/exports/ubuntu-20.04.5-arm64,v3,ro ip=dhcp
+
