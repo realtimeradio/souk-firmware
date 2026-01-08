@@ -505,7 +505,6 @@ class SoukMkidReadout():
                 self.logger.info("Initializing shared block (writable): %s" % blockname)
             block.initialize(read_only=read_only)
 
-
     def initialize_pipeline_blocks(self, read_only=False):
         """
         Call the "initialize" methods of all pipeline-specific blocks.
