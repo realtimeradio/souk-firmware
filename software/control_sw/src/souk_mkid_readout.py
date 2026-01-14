@@ -547,8 +547,7 @@ class SoukMkidReadout():
         """
         Zero out all synthesis bank outputs.
         """
-        for synth in [self.psb_chanselect, self.psb_offset_chanselect]:
-            synth.initialize()
+        self.psb_chanselect.initialize()
 
     def _get_closest_pfb_bin(self, freq_hz):
         """
