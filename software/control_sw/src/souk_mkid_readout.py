@@ -664,6 +664,9 @@ class SoukMkidReadout():
             the same FFT bin (due to VACC dual-port RAM timing). Default is 6, anything lower
             will lead to missing tones.
         :type min_tone_separation: int
+
+        :return: Mapping from tone index to LO index, so users know which LO each tone ended up on (``tone_to_lo``).
+        :rtype: dict
         """
         n_tones = len(freqs_hz)
         if phase_offsets_rads is None:
