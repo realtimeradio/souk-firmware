@@ -674,7 +674,6 @@ class SoukMkidReadout():
         if amplitudes is None:
             amplitudes = np.ones(n_tones, dtype=float)
         
-        assert len(freqs_hz) == n_tones
         assert len(phase_offsets_rads) == n_tones
         assert len(amplitudes) == n_tones
         
