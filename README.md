@@ -114,9 +114,17 @@ ssh casper@10.11.11.11 # password is casper
 4. Install `tcpborphserver3`
   ```bash
   cd ~/src/souk-firmware/software/zynq
-  cd katcp_devel/rfdc
+  cd katcp_devel/libmetal
+  # Install libmetal
+  mkdir build
+  cd build
+  cmake ..
+  sudo make install
+  # Install Xilinx RFDC drivers
+  cd ../rfdc
   make clean
   make -f Makefile.Linux
+  # Install tcpborphserver
   cd ..
   make clean 
   RFSOC_PLATFORM=ZCU216 IS_RFSOC=1 make

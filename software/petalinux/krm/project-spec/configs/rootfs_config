@@ -534,11 +534,11 @@ CONFIG_can-utils=y
 #
 # nfs-utils 
 #
-# CONFIG_nfs-utils is not set
+CONFIG_nfs-utils=y
 # CONFIG_nfs-utils-stats is not set
 # CONFIG_nfs-utils-dbg is not set
 # CONFIG_nfs-utils-dev is not set
-# CONFIG_nfs-utils-client is not set
+CONFIG_nfs-utils-client=y
 
 #
 # openssh 
@@ -4167,7 +4167,9 @@ CONFIG_auto-login=y
 #
 # apps 
 #
+# CONFIG_foo is not set
 # CONFIG_gpio-demo is not set
+CONFIG_initoverlay=y
 # CONFIG_peekpoke is not set
 
 #
