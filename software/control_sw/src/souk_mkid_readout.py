@@ -811,15 +811,18 @@ class SoukMkidReadout():
                 self.psb_chanselect.set_single_channel(b, -1)
         else:
             # List of lists case: bins can have multiple tones
-            for b, tones in enumerate(chanmap):
+            # Work on a copy to avoid mutating internal state returned by
+            # get_channel_outmap() directly.
+            updated_chanmap = [list(tones) for tones in chanmap]
+            for b, tones in enumerate(updated_chanmap):
                 if tone_id in tones:
                     # Remove this tone from the bin
                     new_tones = [t for t in tones if t != tone_id]
                     if len(new_tones) == 0:
                         new_tones = [-1]
-                    chanmap[b] = new_tones
+                    updated_chanmap[b] = new_tones
             # Write the updated map
-            self.psb_chanselect.set_channel_outmap(chanmap)
+            self.psb_chanselect.set_channel_outmap(updated_chanmap)
         
         if freq_hz is None:
             return
