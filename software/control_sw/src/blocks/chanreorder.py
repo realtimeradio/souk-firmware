@@ -675,50 +675,81 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
             corresponds to the output channel to which input `i` contributes.
         :rtype: list
         """
-        # Read and decode the reorder memory contents into an array
+        # Read the reorder memory contents
         nbytes = self._reorder_depth * np.dtype(self._map_format).itemsize
-        serial_maps = np.zeros([self._expansion_factor, self._reorder_depth])
+        serial_maps = np.zeros([self._expansion_factor, self._reorder_depth], dtype=int)
         for i in range(self._expansion_factor):
             serial_maps[i] = np.frombuffer(self.read(f'map{i}_{self._map_reg}', nbytes), dtype=self._map_format)
 
-        # Which serial position in each path does a channel map to
-        block_s_offset = serial_maps // self.n_parallel_samples
-        # Which parallel position in this word in this path
-        block_p_offset = serial_maps % self.n_parallel_samples
-
-        outmap = np.zeros(self.n_chans_out, dtype=int)
-        for i in range(self._expansion_factor):
-            for j in range(self._reorder_depth):
-                s_off = j // self.n_parallel_samples
-                p_off = j % self.n_parallel_samples
-                outmap[i * self.n_parallel_samples + s_off*self.n_parallel_chans_out + p_off] = serial_maps[i, j]
-        return outmap
-        return list(super(VaccReorderMultiSampleIn, self).get_channel_outmap())
+        # Precompute the mapping from (block_id, block_offset) -> output channel
+        outchans = np.arange(self.n_chans_out)
+        block_id = (outchans // self.n_parallel_samples) % self._expansion_factor
+        block_s_offset = outchans // self.n_parallel_chans_out
+        block_p_offset = outchans % self.n_parallel_samples
+        block_offset = block_s_offset * self.n_parallel_samples + block_p_offset
+        
+        offset_to_outchan = {}
+        for out_ch in range(self.n_chans_out):
+            offset_to_outchan[(block_id[out_ch], block_offset[out_ch])] = out_ch
+        
+        # Default stored value is (n_chans_in - 1) = 2047
+        default_val = self.n_chans_in - 1
+        
+        inmap = np.ones(self.n_chans_in, dtype=int) * (self.n_chans_out - 1)
+        for i in range(self.n_chans_in):  # i = input channel index
+            # Check which expansion block has a non-default value for input i
+            for exp_idx in range(self._expansion_factor):
+                stored_val = serial_maps[exp_idx, i]
+                if stored_val != default_val:
+                    # This block was written to - decode the output channel
+                    key = (exp_idx, stored_val)
+                    outchan = offset_to_outchan.get(key)
+                    if outchan is not None:
+                        inmap[i] = outchan
+                    else:
+                        logger = getattr(self, "logger", None)
+                        if logger is not None:
+                            logger.warning(
+                                "ChanReorderMultiSample.get_channel_inmap: "
+                                "unexpected mapping value %s for input %s in expansion block %s; "
+                                "treating as discard bin.",
+                                stored_val,
+                                i,
+                                exp_idx,
+                            )
+                    break
+        
+        return inmap    
 
     def get_channel_outmap(self):
         """
         Read the currently loaded reorder map.
 
         :return: The reorder map currently loaded. Entry `i` in this map is the
-            list of input channel indices which contribute to output channel input `i`.
-        :rtype: list
+            input channel index which contributes to output channel `i`.
+            If each output has at most one input, returns a 1D numpy array.
+            If any output has multiple inputs, returns a list of lists.
+        :rtype: np.ndarray or list
         """
         inmap = self.get_channel_inmap()
+        discard_bin = self.n_chans_out - 1
         outmap = [[] for _ in range(self.n_chans_out)]
         for i, v in enumerate(inmap):
-            outmap[v] += [i]
-        # For consistency with other reorder blocks, use -1 to mean "not used". The last input channel
-        # is always unused
-        outmap[self.n_chans_in-1] = [-1]
+            # Don't accumulate into the discard bin
+            if v != discard_bin:
+                outmap[v] += [i]
+        # For consistency with other reorder blocks, use -1 to mean "not used".
+        # The discard bin is always marked as unused.
+        outmap[discard_bin] = [-1]
         for i, v in enumerate(outmap):
             if v == []:
                 outmap[i] = [-1]
-        # If we can, return as a numpy array for API consistency.
-        # This won't work if multiple input channels are contributing to the same output
-        try:
-            return np.array(outmap, dtype=int).flatten()
-        except ValueError:
+        # If each output has exactly one input, return a 1D numpy array for API consistency
+        if all(len(v) == 1 for v in outmap):
+            return np.array([v[0] for v in outmap], dtype=int)
+        else:
             return outmap
+        
 
     def set_single_channel(self, outidx, inidx):
         """
@@ -741,11 +772,21 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
         # If the output channel is undriven (driven by input -1)
         # set it to be driven by the input index.
         # Otherwise, add the input index to the list of other drivers
-        if outmap[outidx] == -1 or inidx == -1:
-            outmap[outidx] = inidx
+        current_val = outmap[outidx]
+        is_list = isinstance(current_val, list)
+        is_undriven = (current_val == -1) or (is_list and current_val == [-1])
+        if is_undriven or inidx == -1:
+            # Preserve container type: use lists for list-of-lists maps
+            outmap[outidx] = [inidx] if is_list else inidx
         else:
-            outmap[outidx] += [inidx]
+            # Handle both numpy array and list of lists cases
+            if isinstance(outmap, np.ndarray):
+                # Convert to list of lists for modification
+                outmap = [[v] for v in outmap]
+            outmap[outidx] = outmap[outidx] + [inidx]
         self.set_channel_outmap(outmap)
+
+
 
     def initialize(self, read_only=False):
         """

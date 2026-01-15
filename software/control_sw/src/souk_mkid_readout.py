@@ -639,6 +639,119 @@ class SoukMkidReadout():
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
 
+
+    def set_multi_tone_vacc(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx', 'tx'], min_tone_separation=6):
+        """
+        Configure both TX and RX paths for multiple tones, supporting multiple tones per FFT bin.
+        Handles the VACC constraint that consecutive LO indices cannot feed the same bin.
+
+        :param freqs_hz: Tone frequencies, in Hz.
+        :type freqs_hz: list of float
+
+        :param phase_offsets_rads: Phase offset of tones, in radians. If none is
+            provided, offsets of 0 are used.
+        :type phase_offsets_rads: list of float
+
+        :param amplitudes: Relative amplitude of tones, provided as a list
+            of floats between 0 and 1. If none is provided, amplitudes of 1.0
+            are used.
+        :type amplitudes: list of float
+
+        :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
+        :type los: list
+
+        :param min_tone_separation: Minimum separation between LO indices that feed
+            the same FFT bin (due to VACC dual-port RAM timing). Default is 6, anything lower
+            will lead to missing tones.
+        :type min_tone_separation: int
+
+        :return: Mapping from tone index to LO index, so users know which LO each tone ended up on (``tone_to_lo``).
+        :rtype: dict
+        """
+        n_tones = len(freqs_hz)
+        if phase_offsets_rads is None:
+            phase_offsets_rads = np.zeros(n_tones, dtype=float)
+        if amplitudes is None:
+            amplitudes = np.ones(n_tones, dtype=float)
+        
+        assert len(phase_offsets_rads) == n_tones
+        assert len(amplitudes) == n_tones
+        
+        # Group tones by their target RX FFT bin
+        bin_to_tones = {}  # bin_index -> list of (tone_idx, freq_offset_hz)
+        
+        for tone_idx, freq_hz in enumerate(freqs_hz):
+            rx_nearest_bin, rx_freq_offset_hz = self._get_closest_pfb_bin(freq_hz)
+            if rx_nearest_bin not in bin_to_tones:
+                bin_to_tones[rx_nearest_bin] = []
+            bin_to_tones[rx_nearest_bin].append((tone_idx, rx_freq_offset_hz))
+        
+        # Build the inmap: for each LO index, specify which FFT bin it feeds
+        # Initialize all LOs to feed the "discard" bin (last output channel)
+        inmap = np.ones(N_TONE, dtype=int) * (self.psb_chanselect.n_chans_out - 1)
+        
+        # Also track chanselect outmap (which RX PFB bin feeds each LO)
+        chanmap_in = -1 * np.ones(self.chanselect.n_chans_out, dtype=int)
+        lo_freqs_hz = np.zeros(N_TONE, dtype=float)
+        
+        # Assign LO indices to bins, respecting the VACC constraint
+        # For bins with multiple tones, we need to ensure LO indices are separated
+        lo_idx = 0
+        tone_to_lo = {}  # original tone index -> assigned LO index
+        
+        # Iterate over bins in a deterministic order for reproducible LO assignment
+        for rx_bin in sorted(bin_to_tones):
+            tone_list = bin_to_tones[rx_bin]
+            n_tones_in_bin = len(tone_list)
+            
+            for i, (orig_tone_idx, freq_offset_hz) in enumerate(tone_list):
+                # Find a suitable LO index
+                # If multiple tones in this bin, ensure spacing
+                if i > 0:
+                    # Need to skip ahead to maintain min_tone_separation from previous LO in same bin
+                    prev_lo = tone_to_lo[tone_list[i-1][0]]
+                    required_lo = prev_lo + min_tone_separation
+                    if lo_idx < required_lo:
+                        lo_idx = required_lo
+                
+                if lo_idx >= N_TONE:
+                    raise ValueError(
+                        f"Ran out of LO slots while processing RX bin {rx_bin} "
+                        f"with {n_tones_in_bin} tone(s) in this bin. "
+                        f"{len(tone_to_lo)} LO(s) were already assigned out of a maximum of {N_TONE}. "
+                        "Consider reducing the total number of tones or the number of tones assigned "
+                        "to heavily populated bins."
+                    )
+                
+                # Assign this LO to this bin
+                tone_to_lo[orig_tone_idx] = lo_idx
+                inmap[lo_idx] = rx_bin
+                chanmap_in[lo_idx] = rx_bin  # This LO gets data from this RX bin
+                lo_freqs_hz[lo_idx] = freq_offset_hz
+                
+                lo_idx += 1
+        
+        # Write RX channel selection (which PFB bin feeds each mixer/LO)
+        self.chanselect.set_channel_outmap(chanmap_in)
+        
+        # Write mixer tones (only for used LOs, but set_freqs expects full array)
+        # We need to set phases and amplitudes for the assigned LO indices
+        lo_phases = np.zeros(N_TONE, dtype=float)
+        lo_amps = np.zeros(N_TONE, dtype=float)
+        for orig_idx, lo_idx in tone_to_lo.items():
+            lo_phases[lo_idx] = phase_offsets_rads[orig_idx]
+            lo_amps[lo_idx] = amplitudes[orig_idx]
+        
+        self.mixer.set_freqs(lo_freqs_hz, lo_phases, lo_amps, self.adc_clk_hz, los)
+        
+        # Write the inmap for the VACC reorder (PSB side)
+        self.psb_chanselect.set_channel_inmap(inmap)
+        
+        return tone_to_lo  # Return mapping so user knows which LO each tone ended up on
+
+
+
+
     def set_output_psb_scale(self, nshift, scale=1., check_overflow=True):
         """
         Set the PSB to scale down by 2^nshift in amplitude.
@@ -697,8 +810,27 @@ class SoukMkidReadout():
         # Disable anywhere either synthesizer is already using this tone ID
         # TODO: is this the best behaviour?
         chanmap = self.psb_chanselect.get_channel_outmap()
-        for b in np.where(chanmap == tone_id)[0]:
-            self.psb_chanselect.set_single_channel(b, -1)
+        
+        # Handle both numpy array and list of lists cases
+        if isinstance(chanmap, np.ndarray):
+            # Simple case: each bin has one tone
+            for b in np.where(chanmap == tone_id)[0]:
+                self.psb_chanselect.set_single_channel(b, -1)
+        else:
+            # List of lists case: bins can have multiple tones
+            # Work on a copy to avoid mutating internal state returned by
+            # get_channel_outmap() directly.
+            updated_chanmap = [list(tones) for tones in chanmap]
+            for b, tones in enumerate(updated_chanmap):
+                if tone_id in tones:
+                    # Remove this tone from the bin
+                    new_tones = [t for t in tones if t != tone_id]
+                    if len(new_tones) == 0:
+                        new_tones = [-1]
+                    updated_chanmap[b] = new_tones
+            # Write the updated map
+            self.psb_chanselect.set_channel_outmap(updated_chanmap)
+        
         if freq_hz is None:
             return
         ### Configure receiving side
