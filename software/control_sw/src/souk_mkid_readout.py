@@ -700,7 +700,9 @@ class SoukMkidReadout():
         lo_idx = 0
         tone_to_lo = {}  # original tone index -> assigned LO index
         
-        for rx_bin, tone_list in bin_to_tones.items():
+        # Iterate over bins in a deterministic order for reproducible LO assignment
+        for rx_bin in sorted(bin_to_tones):
+            tone_list = bin_to_tones[rx_bin]
             n_tones_in_bin = len(tone_list)
             
             for i, (orig_tone_idx, freq_offset_hz) in enumerate(tone_list):
