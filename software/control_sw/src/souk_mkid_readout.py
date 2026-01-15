@@ -714,7 +714,13 @@ class SoukMkidReadout():
                         lo_idx = required_lo
                 
                 if lo_idx >= N_TONE:
-                    raise ValueError(f"Ran out of LO slots. Reduce number of tones or tones per bin.")
+                    raise ValueError(
+                        f"Ran out of LO slots while processing RX bin {rx_bin} "
+                        f"with {n_tones_in_bin} tone(s) in this bin. "
+                        f"{len(tone_to_lo)} LO(s) were already assigned out of a maximum of {N_TONE}. "
+                        "Consider reducing the total number of tones or the number of tones assigned "
+                        "to heavily populated bins."
+                    )
                 
                 # Assign this LO to this bin
                 tone_to_lo[orig_tone_idx] = lo_idx
