@@ -761,8 +761,11 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
         # set it to be driven by the input index.
         # Otherwise, add the input index to the list of other drivers
         current_val = outmap[outidx]
-        if current_val == -1 or inidx == -1:
-            outmap[outidx] = inidx
+        is_list = isinstance(current_val, list)
+        is_undriven = (current_val == -1) or (is_list and current_val == [-1])
+        if is_undriven or inidx == -1:
+            # Preserve container type: use lists for list-of-lists maps
+            outmap[outidx] = [inidx] if is_list else inidx
         else:
             # Handle both numpy array and list of lists cases
             if isinstance(outmap, np.ndarray):
