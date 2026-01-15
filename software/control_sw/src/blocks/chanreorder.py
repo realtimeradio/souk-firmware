@@ -703,8 +703,20 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
                 if stored_val != default_val:
                     # This block was written to - decode the output channel
                     key = (exp_idx, stored_val)
-                    if key in offset_to_outchan:
-                        inmap[i] = offset_to_outchan[key]
+                    outchan = offset_to_outchan.get(key)
+                    if outchan is not None:
+                        inmap[i] = outchan
+                    else:
+                        logger = getattr(self, "logger", None)
+                        if logger is not None:
+                            logger.warning(
+                                "ChanReorderMultiSample.get_channel_inmap: "
+                                "unexpected mapping value %s for input %s in expansion block %s; "
+                                "treating as discard bin.",
+                                stored_val,
+                                i,
+                                exp_idx,
+                            )
                     break
         
         return inmap    
