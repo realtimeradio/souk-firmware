@@ -1,1 +1,1 @@
-__fwversion__ = "7.8"
+__fwversion__ = "7.9"
