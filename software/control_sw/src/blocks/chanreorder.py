@@ -603,6 +603,7 @@ class ChanReorderMultiSampleIn(ChanReorder):
             self.set_channel_outmap(chan_order)
 
 class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
+    DISCARD_BIN = 2**32 - 1
     def set_channel_inmap(self, inmap):
         """
         Remap the channels such that input channel `i`
@@ -613,8 +614,8 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
             output channel 0.
         :type inmap: list
         """
-        # default to sending to last output, which is rejected in firmware
-        serial_maps = (self.n_chans_in - 1) * np.ones([self._expansion_factor, self._reorder_depth])
+        # default to sending to discard bin, which is rejected in firmware
+        serial_maps = self.DISCARD_BIN * np.ones([self._expansion_factor, self._reorder_depth])
         inmap = np.array(inmap, dtype=int)
         nin = len(inmap)
 
@@ -692,15 +693,12 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
         for out_ch in range(self.n_chans_out):
             offset_to_outchan[(block_id[out_ch], block_offset[out_ch])] = out_ch
         
-        # Default stored value is (n_chans_in - 1) = 2047
-        default_val = self.n_chans_in - 1
-        
-        inmap = np.ones(self.n_chans_in, dtype=int) * (self.n_chans_out - 1)
+        inmap = np.ones(self.n_chans_in, dtype=int) * self.DISCARD_BIN
         for i in range(self.n_chans_in):  # i = input channel index
             # Check which expansion block has a non-default value for input i
             for exp_idx in range(self._expansion_factor):
                 stored_val = serial_maps[exp_idx, i]
-                if stored_val != default_val:
+                if stored_val != self.DISCARD_BIN:
                     # This block was written to - decode the output channel
                     key = (exp_idx, stored_val)
                     outchan = offset_to_outchan.get(key)
@@ -732,15 +730,14 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
         :rtype: np.ndarray or list
         """
         inmap = self.get_channel_inmap()
-        discard_bin = self.n_chans_out - 1
         outmap = [[] for _ in range(self.n_chans_out)]
         for i, v in enumerate(inmap):
             # Don't accumulate into the discard bin
-            if v != discard_bin:
+            if v != self.DISCARD_BIN:
                 outmap[v] += [i]
         # For consistency with other reorder blocks, use -1 to mean "not used".
         # The discard bin is always marked as unused.
-        outmap[discard_bin] = [-1]
+        outmap[self.DISCARD_BIN] = [-1]
         for i, v in enumerate(outmap):
             if v == []:
                 outmap[i] = [-1]
@@ -800,7 +797,7 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
         if read_only:
             pass
         else:
-            chan_order = (self.n_chans_out - 1) * np.ones(self.n_chans_in)
+            chan_order = self.DISCARD_BIN * np.ones(self.n_chans_in)
             self.set_channel_inmap(chan_order)
 
 class ChanReorderPS(ChanReorder):
