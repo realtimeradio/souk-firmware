@@ -687,8 +687,9 @@ class SoukMkidReadout():
             bin_to_tones[rx_nearest_bin].append((tone_idx, rx_freq_offset_hz))
         
         # Build the inmap: for each LO index, specify which FFT bin it feeds
-        # Initialize all LOs to feed the "discard" bin (last output channel)
-        inmap = np.ones(N_TONE, dtype=int) * (self.psb_chanselect.n_chans_out - 1)
+        # Initialize all LOs to feed the "discard" bin.
+        inmap = np.ones(N_TONE, dtype=int) * self.psb_chanselect.DISCARD_BIN
+
         
         # Also track chanselect outmap (which RX PFB bin feeds each LO)
         chanmap_in = -1 * np.ones(self.chanselect.n_chans_out, dtype=int)

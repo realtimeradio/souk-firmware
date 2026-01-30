@@ -303,7 +303,7 @@ class Accumulator(Block):
         Trigger collection of a new burst of samples
         """
         self.change_reg_bits('burst_mode', 0, 0)
-        self.change_reg_bits('burst_mode', 0, 1) # Edge sensitive
+        self.change_reg_bits('burst_mode', 1, 0) # Edge sensitive
 
     def get_new_burst(self):
         """
