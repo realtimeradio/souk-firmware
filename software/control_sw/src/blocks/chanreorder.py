@@ -603,7 +603,10 @@ class ChanReorderMultiSampleIn(ChanReorder):
             self.set_channel_outmap(chan_order)
 
 class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
-    DISCARD_BIN = 2**32 - 1
+    DISCARD_BIT = np.uint32(2**31) # 0x80000000
+    DISCARD_BIN = 0 | DISCARD_BIT # doesnt matter what the address is when discard bit set
+    ADDR_MASK   = DISCARD_BIT-1 # 0x7FFFFFFF
+
     def set_channel_inmap(self, inmap):
         """
         Remap the channels such that input channel `i`
@@ -615,12 +618,16 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
         :type inmap: list
         """
         # default to sending to discard bin, which is rejected in firmware
-        serial_maps = self.DISCARD_BIN * np.ones([self._expansion_factor, self._reorder_depth])
-        inmap = np.array(inmap, dtype=int)
+        # serial_maps = self.DISCARD_BIN * np.ones([self._expansion_factor, self._reorder_depth])
+        serial_maps = np.empty((self._expansion_factor, self._reorder_depth), dtype=np.uint32)
+        serial_maps[:] = self.DISCARD_BIN  # discard bit set everywhere by default
+        
+        inmap = np.array(inmap, dtype=np.uint32)
         nin = len(inmap)
 
+
         # Look at all possible output channels and figure out what their corresponding position in the input is
-        outchans = np.arange(self.n_chans_out)
+        outchans = np.arange(self.n_chans_out,dtype=int)
         # To which parallel path does a given output channel map?
         block_id = (outchans // self.n_parallel_samples) % self._expansion_factor # I.e. which reorder block
         # Which serial position in this path does a channel map to
@@ -634,10 +641,19 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
         block_offset = block_s_offset * self.n_parallel_samples + block_p_offset 
 
         # We want the user-select channel to end up in position `block_offset` of the block `block_id`
-        for i in range(nin):
-            serial_maps[block_id[inmap[i]], i] = block_offset[inmap[i]]
+        for in_ch in range(nin):
+            out_ch = inmap[in_ch]
+            if out_ch & self.DISCARD_BIT:
+                # Input mapped to discard bin - leave as default
+                continue
+            
+            if out_ch < 0 or out_ch >= self.n_chans_out:
+                raise ValueError(f'Input channel {in_ch} mapped to invalid output channel {out_ch}')
 
-        serial_maps = np.array(serial_maps, dtype=self._map_format)
+            bid = int(block_id[out_ch])
+            serial_maps[bid, in_ch] = np.uint32(block_offset[out_ch])
+
+        serial_maps = serial_maps.astype(self._map_format)
 
         for i in range(self._expansion_factor):
             self.write(f'map{i}_{self._map_reg}', serial_maps[i].tobytes())
@@ -674,50 +690,58 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
 
         :return: The reorder map currently loaded. Entry `i` in this map
             corresponds to the output channel to which input `i` contributes.
-        :rtype: list
+            Discarded inputs are returned as DISCARD_BIN .
+        :rtype: array of int
         """
+
         # Read the reorder memory contents
         nbytes = self._reorder_depth * np.dtype(self._map_format).itemsize
-        serial_maps = np.zeros([self._expansion_factor, self._reorder_depth], dtype=int)
+        serial_maps = np.zeros((self._expansion_factor, self._reorder_depth), dtype=np.uint32)
         for i in range(self._expansion_factor):
-            serial_maps[i] = np.frombuffer(self.read(f'map{i}_{self._map_reg}', nbytes), dtype=self._map_format)
+            buf = self.read(f"map{i}_{self._map_reg}", nbytes)
+            serial_maps[i] = np.frombuffer(buf, dtype=self._map_format).astype(np.uint32)
 
-        # Precompute the mapping from (block_id, block_offset) -> output channel
-        outchans = np.arange(self.n_chans_out)
+        # Precompute mapping from (block_id, block_offset) -> output channel
+        outchans = np.arange(self.n_chans_out, dtype=np.int64)
         block_id = (outchans // self.n_parallel_samples) % self._expansion_factor
         block_s_offset = outchans // self.n_parallel_chans_out
         block_p_offset = outchans % self.n_parallel_samples
         block_offset = block_s_offset * self.n_parallel_samples + block_p_offset
-        
-        offset_to_outchan = {}
-        for out_ch in range(self.n_chans_out):
-            offset_to_outchan[(block_id[out_ch], block_offset[out_ch])] = out_ch
-        
-        inmap = np.ones(self.n_chans_in, dtype=int) * self.DISCARD_BIN
-        for i in range(self.n_chans_in):  # i = input channel index
-            # Check which expansion block has a non-default value for input i
+
+        offset_to_outchan = {(int(block_id[o]), int(block_offset[o])): int(o) for o in range(self.n_chans_out)}
+
+        inmap = np.ones(self.n_chans_in, dtype=np.uint32) * self.DISCARD_BIN
+
+        for in_ch in range(self.n_chans_in):  # input channel index
+            mapped = None
+
+            # Find the expansion block where this input is *not* discard
             for exp_idx in range(self._expansion_factor):
-                stored_val = serial_maps[exp_idx, i]
-                if stored_val != self.DISCARD_BIN:
-                    # This block was written to - decode the output channel
-                    key = (exp_idx, stored_val)
-                    outchan = offset_to_outchan.get(key)
-                    if outchan is not None:
-                        inmap[i] = outchan
-                    else:
-                        logger = getattr(self, "logger", None)
-                        if logger is not None:
-                            logger.warning(
-                                "ChanReorderMultiSample.get_channel_inmap: "
-                                "unexpected mapping value %s for input %s in expansion block %s; "
-                                "treating as discard bin.",
-                                stored_val,
-                                i,
-                                exp_idx,
-                            )
-                    break
-        
-        return inmap    
+                v = np.uint32(serial_maps[exp_idx, in_ch])
+
+                if (v & self.DISCARD_BIT) != 0:
+                    continue
+
+                addr = int(v & self.ADDR_MASK)
+                key = (exp_idx, addr)
+                mapped = offset_to_outchan.get(key)
+
+                if mapped is None:
+                    logger = getattr(self, "logger", None)
+                    if logger is not None:
+                        logger.warning(
+                            "ChanReorderMultiSample.get_channel_inmap: "
+                            "unexpected mapping value 0x%08x (addr=%d) for input %d in expansion block %d; "
+                            "treating as discard.",
+                            int(v), addr, in_ch, exp_idx,
+                        )
+                break  # found a non-discard word (valid or invalid), stop scanning blocks
+
+            if mapped is not None:
+                inmap[in_ch] = mapped
+
+        return inmap
+
 
     def get_channel_outmap(self):
         """
@@ -797,7 +821,7 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
         if read_only:
             pass
         else:
-            chan_order = self.DISCARD_BIN * np.ones(self.n_chans_in)
+            chan_order = self.DISCARD_BIN * np.ones(self.n_chans_in,dtype=np.uint32)
             self.set_channel_inmap(chan_order)
 
 class ChanReorderPS(ChanReorder):
