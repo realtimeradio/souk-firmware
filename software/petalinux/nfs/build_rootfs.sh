@@ -70,6 +70,9 @@ echo "Europe/London" > /etc/timezone && \
 apt install -y dialog perl
 #apt install -y sudo apt-utils vim ifupdown net-tools ethtool udev iputils-ping resolvconf wget kmod device-tree-compiler openssh-client openssh-server build-essential cmake git i2c-tools
 
+ldconfig
+ln -s /sys/kernel/config /configfs
+
 echo "# <file system> <dir> <type> <options> <dump> <pass>" > /etc/fstab
 #echo "/dev/mmcblk1p1 /boot  vfat   umask=0002,utf8=true  0 0" >> /etc/fstab
 
@@ -79,6 +82,7 @@ echo "iface end0 inet dhcp" >> /etc/network/interfaces.d/end0
 if [ -n "$MACADDRESS" ]; then
     echo "    hwaddress ether $MACADDRESS" >> /etc/network/interfaces.d/end0
 fi
+
 
 # exit the chroot
 EOF

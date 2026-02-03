@@ -759,9 +759,6 @@ class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
             # Don't accumulate into the discard bin
             if v != self.DISCARD_BIN:
                 outmap[v] += [i]
-        # For consistency with other reorder blocks, use -1 to mean "not used".
-        # The discard bin is always marked as unused.
-        outmap[self.DISCARD_BIN] = [-1]
         for i, v in enumerate(outmap):
             if v == []:
                 outmap[i] = [-1]
