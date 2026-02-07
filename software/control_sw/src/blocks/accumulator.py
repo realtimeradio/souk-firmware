@@ -567,7 +567,7 @@ class WindowedAccumulator(Accumulator):
         # Force a trigger, but let firmware decide which samples are valid
         # since this is how the specific channel is selected
         raw, t = ss.read_raw(man_trig=True, man_valid=False)
-        dc = np.frombuffer(raw['data'], dtype='>i4') / self._OUTPUT_BP
+        dc = np.frombuffer(raw['data'], dtype='>i4') / (2**self._OUTPUT_BP)
         if not self._is_complex:
             return dc
         else:
