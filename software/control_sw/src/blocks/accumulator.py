@@ -546,13 +546,17 @@ class WindowedAccumulator(Accumulator):
         d, _ = self._read_bram(get_tt=None)
         return d
 
-    def get_new_snapshot(self, chan=None):
+    def get_new_snapshot(self, chan=None, scale_bp=False):
         """
         Get a snapshot of data from a single tone.
 
         :param chan: If provided, set snapshot channel to this index before triggering.
             If None, leave unchanged.
         :type chan: int
+
+        :param scale_bp: If True, divide the data to scale for the firmware's interpretation
+            of the binary point.
+        :type scale_bp: int
 
         :return: Array of sample value vs time
         :rtype: numpy.ndarray
@@ -567,7 +571,9 @@ class WindowedAccumulator(Accumulator):
         # Force a trigger, but let firmware decide which samples are valid
         # since this is how the specific channel is selected
         raw, t = ss.read_raw(man_trig=True, man_valid=False)
-        dc = np.frombuffer(raw['data'], dtype='>i4') / (2**self._OUTPUT_BP)
+        dc = np.frombuffer(raw['data'], dtype='>i4')
+        if scale_bp:
+            dc /= 2**self._OUTPUT_BP
         if not self._is_complex:
             return dc
         else:
