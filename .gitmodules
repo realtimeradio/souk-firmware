@@ -10,3 +10,6 @@
 [submodule "software/zynq/katcp_devel"]
 	path = software/zynq/katcp_devel
 	url = https://github.com/realtimeradio/katcp_devel
+[submodule "firmware/lib/ska-low-sps-xml2vhdl"]
+	path = firmware/lib/ska-low-sps-xml2vhdl
+	url = https://gitlab.com/realtimeradio/rtr/ska-low-sps-xml2vhdl
