@@ -200,7 +200,7 @@ class Accumulator(Block):
 
         """
         from matplotlib import pyplot as plt
-        spec = self.get_new_spectra()
+        spec = self.get_new_spectra()[0]
         if sample_rate_hz is None:
             x = np.arange(self.n_chans)
             xlabel = 'Frequency Channel'
