@@ -38,7 +38,7 @@ N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
 ADC_FPGA_DEMUX_RATIO = 8 # ADC samples per FPGA clock
 N_RX_FFT = N_RX_OVERSAMPLE*4096 # Number of FFT points in RX channelizer 
 N_TX_FFT = 4096 # Number of FFT points in TX synthesizer (not including oversampling)
-SYNC_DELAY = 5712 # TX vs RX skew as measured with firmware loopback
+SYNC_DELAY = 5714 # TX vs RX skew as measured with firmware loopback
 
 FW_TYPE_PARAMS = {
         10: {
