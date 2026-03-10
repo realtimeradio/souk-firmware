@@ -1,14 +1,44 @@
 from distutils.core import setup
 import glob
 import os
+import re
+import subprocess
 
-ver = "0.1"
-try:
-    import subprocess
-    ver = subprocess.check_output(['git', 'describe', '--abbrev=8', '--always', '--dirty', '--tags']).decode().strip()
-    print('Version is: %s' % ver)
-except:
-    print('Couldn\'t get version from git. Defaulting to %s' % ver)
+def pep440_from_git_describe(desc: str) -> str:
+    s = desc.strip()
+    dirty = s.endswith("-dirty")
+    s = s[:-6] if dirty else s  # keep compatible (no removesuffix)
+    m = re.fullmatch(r"v?(\d+(?:\.\d+)*)(?:-(\d+)-g([0-9a-f]+))?", s, re.I)
+    # RE matching:
+    #   v?            optional leading 'v' in tag
+    #   (\d+(?:\.\d+)*)  version number like 7.4.2 or 7.4.2.0
+    #   (?:-(\d+)-g([0-9a-f]+))?
+    #       optional "-N-gHASH" meaning:
+    #         N     = number of commits since the tag
+    #         HASH  = abbreviated git commit hash
+    if m:
+        base, n, sha = m.groups()
+        v = base if n is None else f"{base}.post{n}+g{sha}"
+    else:
+        sha = re.sub(r"[^0-9a-f]", "", s.lower())[:8] or "unknown"
+        v = f"0.0+g{sha}"
+
+    return v + (".dirty" if dirty else "")
+
+def get_version(default="0.1") -> str:
+    try:
+        desc = subprocess.check_output(
+            ["git", "describe", "--abbrev=8", "--always", "--dirty", "--tags"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+        v = pep440_from_git_describe(desc)
+        print("Version is: %s (from git: %s)" % (v, desc))
+        return v
+    except Exception:
+        print("Couldn't get version from git. Defaulting to %s" % default)
+        return default
+
+ver = get_version()
 
 # Generate a __version__.py file with this version in it
 here = os.path.abspath(os.path.dirname(__file__))

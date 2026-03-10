@@ -43,6 +43,7 @@ class Accumulator(Block):
 
     """
     _N_GPIO = 4 # Number of GPIO counters
+    _OUTPUT_BP = 18 # Output binary point position
     def __init__(self, host, name,
                  logger=None,
                  acc_len=2**15,
@@ -94,12 +95,16 @@ class Accumulator(Block):
             cnt1 = self.get_acc_cnt()
         return cnt1
 
-    def _read_bram(self, get_tt=False):
+    def _read_bram(self, get_tt=False, scale_bp=False):
         """ 
         Read RAM containing accumulated spectra.
 
         :get_tt: If True, return timestamp corresponding to last sample of accumulation.
         :type get_tt: Bool
+
+        :param scale_bp: If True, divide the data to scale for the firmware's interpretation
+            of the binary point.
+        :type scale_bp: int
 
         :return: data, timestamp tuple
             data is an array of complex valued data, in int32 format. Array
@@ -127,6 +132,8 @@ class Accumulator(Block):
         stop_acc_cnt = self.get_acc_cnt()
         if start_acc_cnt != stop_acc_cnt:
             self.logger.warning('Accumulation counter changed while reading data!')
+        if scale_bp:
+            dout /= 2**self._OUTPUT_BP
         return dout, tt
 
     def get_new_spectra(self, gpio_count=[], get_tt=False):
@@ -193,7 +200,7 @@ class Accumulator(Block):
 
         """
         from matplotlib import pyplot as plt
-        spec = self.get_new_spectra()
+        spec = self.get_new_spectra()[0]
         if sample_rate_hz is None:
             x = np.arange(self.n_chans)
             xlabel = 'Frequency Channel'
@@ -310,6 +317,7 @@ class Accumulator(Block):
             is currently loaded.
         :type read_only: bool
         """
+        devs = self.listdev()
         if read_only:
             self.get_acc_len()
         else:
@@ -454,6 +462,123 @@ class WindowedAccumulator(Accumulator):
         coeffs[0:n_coeffs] = windfunc(acc_len)[0::reuse_factor]
         self._write_window(coeffs)
 
+    def is_burst_mode(self):
+        """
+        Query whether the block is in burst mode.
+
+        :return: True is in burst mode, else False
+        :rtype: bool
+        """
+        return bool(self.get_reg_bits('burst_mode', 1))
+
+    def set_burst_chan(self, burst_chan):
+        """
+        Set the index of the channel used for burst mode capture.
+
+        :param burst_chan: Channel index to select for burst mode.
+        :type burst_chan: int
+        """
+        self.write_int('burst_chan', burst_chan)
+
+    def get_burst_chan(self):
+        """
+        Get the index of the channel currently used for burst mode capture.
+
+        :return: Channel index selected for burst mode.
+        :rtype: int
+        """
+        return self.read_uint('burst_chan')
+
+    def set_snapshot_chan(self, snapshot_chan):
+        """
+        Set the index of the channel used for snapshot mode capture.
+
+        :param snapshot_chan: Channel index to select for snapshot mode.
+        :type snapshot_chan: int
+        """
+        self.write_int('snapshot_chan', snapshot_chan)
+
+    def get_snapshot_chan(self):
+        """
+        Get the index of the channel currently used for snapshot mode capture.
+
+        :return: Channel index selected for snapshot mode.
+        :rtype: int
+        """
+        return self.read_uint('snapshot_chan')
+
+    def set_burst_mode(self, is_burst, burst_chan=None):
+        """
+        Set or unset burst mode.
+
+        :param is_burst: True to enter burst mode, False to exit.
+        :type is_burst: bool
+
+        :param burst_chan: Channel to use for burst mode.
+            If None, leave current settings unchanged.
+        :type burst_chan: int
+        """
+        self.change_reg_bits('burst_mode', int(is_burst), 1)
+        if burst_chan is not None:
+            self.set_burst_chan(burst_chan)
+
+    def _trigger_burst(self):
+        """
+        Trigger collection of a new burst of samples
+        """
+        self.change_reg_bits('burst_mode', 0, 0)
+        self.change_reg_bits('burst_mode', 1, 0) # Edge sensitive
+
+    def get_new_burst(self):
+        """
+        Trigger the collection of a new burst of data, then read it.
+
+        :return: array of `self.n_chans` complex-values, representing consecutive samples in a burst.
+        :rtype: numpy.ndarray
+
+        """
+        c0 = self.get_acc_cnt()
+        self._trigger_burst()
+        c1 = self.get_acc_cnt()
+        if c0 != c1:
+            self.logger.warning('Accumulation count changed while arming')
+        self._wait_for_acc()
+        d, _ = self._read_bram(get_tt=None)
+        return d
+
+    def get_new_snapshot(self, chan=None, scale_bp=False):
+        """
+        Get a snapshot of data from a single tone.
+
+        :param chan: If provided, set snapshot channel to this index before triggering.
+            If None, leave unchanged.
+        :type chan: int
+
+        :param scale_bp: If True, divide the data to scale for the firmware's interpretation
+            of the binary point.
+        :type scale_bp: int
+
+        :return: Array of sample value vs time
+        :rtype: numpy.ndarray
+        """
+        try:
+            ss = self.host.snapshots[self.prefix + 'snapshot']
+        except AttributeError:
+            self.error("Can't find snapshot. Is this feature in the firmware?")
+            raise RuntimeError
+        if chan is not None:
+            self.set_snapshot_chan(chan)
+        # Force a trigger, but let firmware decide which samples are valid
+        # since this is how the specific channel is selected
+        raw, t = ss.read_raw(man_trig=True, man_valid=False)
+        dc = np.frombuffer(raw['data'], dtype='>i4')
+        if scale_bp:
+            dc /= 2**self._OUTPUT_BP
+        if not self._is_complex:
+            return dc
+        else:
+            return dc[0::2] + 1j*dc[1::2]
+
     def get_status(self):
         """
         Get status and error flag dictionaries.
@@ -461,6 +586,9 @@ class WindowedAccumulator(Accumulator):
         Status keys:
 
             - acc_len (int) : Currently loaded accumulation length in number of spectra.
+            - burst_mode (bool) : True if the accumulator is in burst mode, else False
+            - burst_mode_chan (int) : LO index of the channel currently selected for burst mode.
+            - snapshot_chan (int) : LO index of the channel currently selected for snapshot readout.
 
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
             status key-value pairs. flags_dict is
@@ -471,6 +599,9 @@ class WindowedAccumulator(Accumulator):
         stats, flags = super(WindowedAccumulator, self).get_status()
         stats['window_step'] = 2**self.get_window_step()
         stats['window'] = self.get_window()
+        stats['burst_mode'] = self.is_burst_mode()
+        stats['burst_chan'] = self.get_burst_chan()
+        stats['snapshot_chan'] = self.get_snapshot_chan()
         return stats, flags
 
     def initialize(self, read_only=False):
@@ -486,3 +617,6 @@ class WindowedAccumulator(Accumulator):
         if not read_only:
             self.set_window_step(self._n_parallel_sample_bits)
             self._write_window(np.ones(self._window_n_points))
+            self.set_burst_mode(False)
+            self.set_burst_chan(0)
+            self.set_snapshot_chan(0)

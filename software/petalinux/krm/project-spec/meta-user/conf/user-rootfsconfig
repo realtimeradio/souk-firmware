@@ -3,3 +3,5 @@
 
 CONFIG_gpio-demo
 CONFIG_peekpoke
+CONFIG_initoverlay
+CONFIG_foo
