@@ -4167,7 +4167,6 @@ CONFIG_auto-login=y
 #
 # apps 
 #
-# CONFIG_foo is not set
 # CONFIG_gpio-demo is not set
 CONFIG_initoverlay=y
 # CONFIG_peekpoke is not set
@@ -4175,6 +4174,7 @@ CONFIG_initoverlay=y
 #
 # user packages 
 #
+# CONFIG_foo is not set
 
 #
 # PetaLinux RootFS Settings
