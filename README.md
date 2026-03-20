@@ -121,7 +121,7 @@ ssh casper@10.11.11.11 # password is casper
   cmake ..
   sudo make install
   # Install Xilinx RFDC drivers
-  cd ../rfdc
+  cd ../../rfdc
   make clean
   make -f Makefile.Linux
   # Install tcpborphserver
