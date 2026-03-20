@@ -124,6 +124,7 @@ ssh casper@10.11.11.11 # password is casper
   cd ../../rfdc
   make clean
   make -f Makefile.Linux
+  sudo cp -a librfdc.so* /usr/local/lib/
   # Install tcpborphserver
   cd ..
   make clean 
