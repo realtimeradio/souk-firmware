@@ -230,6 +230,11 @@ class SoukMkidReadout():
             self.logger.exception("Couldn't figure out what .fpg to program")
             raise RuntimeError
         realpath = path.realpath(self.fpgfile)
+        # Deprogram if already programmed -- empirically necessary on latest OS image
+        if self.blocks['fpga'].is_programmed():
+            self.logger.info(f"Deprogramming board prior to reprogramming")
+            self._cfpga.deprogram()
+            time.sleep(1)
         self.logger.info(f"Programming with {realpath}")
         self._cfpga.upload_to_ram_and_program(realpath)
         self._create_block_interfaces()
