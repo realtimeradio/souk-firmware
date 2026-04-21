@@ -231,7 +231,7 @@ class SoukMkidReadout():
             raise RuntimeError
         realpath = path.realpath(self.fpgfile)
         # Deprogram if already programmed -- empirically necessary on latest OS image
-        if self.blocks['fpga'].is_programmed():
+        if self.fpga.is_programmed():
             self.logger.info(f"Deprogramming board prior to reprogramming")
             self._cfpga.deprogram()
             time.sleep(1)
