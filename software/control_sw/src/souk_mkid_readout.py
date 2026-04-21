@@ -257,7 +257,16 @@ class SoukMkidReadout():
         if not self.fpga.is_programmed():
             self.logger.info('Board is not programmed with valid firmware. Skipping block initialization')
             return
+        est_fpga_clk_hz = self.fpga.get_fpga_clock()
+        if est_fpga_clk_hz == 0:
+            self.logger.error('FPGA is not clocking. Check clock connections and PLL lock states.')
+            raise RuntimeError
         if not self.fpga.check_firmware_support():
+            # Catch firmware all zeros, which should not happen unless the clock is missing,
+            # which is caught above.
+            if self.fpga.get_firmware_version() == "0.0.0.0":
+                self.logger.error('Error reading firmware version, consistent with no clock')
+                raise RuntimeError
             self.logger.error('Firmware not supported. Try reprogramming with self.program()')
             if not ignore_unsupported:
                 raise RuntimeError
