@@ -56,3 +56,7 @@
                 spi-max-frequency = <6250000>;
         };
 };
+
+&gem2 {
+    xlnx,ptp-enet-clock = <0x0EE6B280>; /* 250 MHz */
+};
