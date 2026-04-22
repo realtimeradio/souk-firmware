@@ -230,6 +230,11 @@ class SoukMkidReadout():
             self.logger.exception("Couldn't figure out what .fpg to program")
             raise RuntimeError
         realpath = path.realpath(self.fpgfile)
+        # Deprogram if already programmed -- empirically necessary on latest OS image
+        if self.fpga.is_programmed():
+            self.logger.info(f"Deprogramming board prior to reprogramming")
+            self._cfpga.deprogram()
+            time.sleep(1)
         self.logger.info(f"Programming with {realpath}")
         self._cfpga.upload_to_ram_and_program(realpath)
         self._create_block_interfaces()
@@ -257,7 +262,16 @@ class SoukMkidReadout():
         if not self.fpga.is_programmed():
             self.logger.info('Board is not programmed with valid firmware. Skipping block initialization')
             return
+        est_fpga_clk_hz = self.fpga.get_fpga_clock()
+        if est_fpga_clk_hz == 0:
+            self.logger.error('FPGA is not clocking. Check clock connections and PLL lock states.')
+            raise RuntimeError
         if not self.fpga.check_firmware_support():
+            # Catch firmware all zeros, which should not happen unless the clock is missing,
+            # which is caught above.
+            if self.fpga.get_firmware_version() == "0.0.0.0":
+                self.logger.error('Error reading firmware version, consistent with no clock')
+                raise RuntimeError
             self.logger.error('Firmware not supported. Try reprogramming with self.program()')
             if not ignore_unsupported:
                 raise RuntimeError
