@@ -36,6 +36,7 @@ class Sync(Block):
     OFFSET_TT_LOAD_ARM = 10
     OFFSET_ENABLE_LOOPBACK = 11
     OFFSET_ENABLE_ERR_FLAG = 12
+    OFFSET_MRST = 12
 
     def __init__(self, host, name, clk_hz=None, sync_delay=1, logger=None):
         super(Sync, self).__init__(host, name, logger)
@@ -109,6 +110,66 @@ class Sync(Block):
         Set the sync pulse to active on a negative edge.
         """
         self.change_reg_bits('ctrl', 0, self.OFFSET_ACTIVE_HIGH)
+
+    def assert_mrst(self):
+        """
+        Assert reset.
+        """
+        self.change_reg_bits('ctrl', 1, self.OFFSET_MRST)
+
+    def deassert_mrst(self):
+        """
+        Deassert reset.
+        """
+        self.change_reg_bits('ctrl', 0, self.OFFSET_MRST)
+
+    def get_time_to_sync(self):
+        """
+        Return the number of FPGA clock ticks until the
+        timed sync event.
+        
+        :return: FPGA clock ticks until sync. Saturates
+                 at +/- 2**31
+        """
+        return self.read_int('time_to_sync')
+
+    def enable_timed_sync(self):
+        """
+        Enable timed sync with TT equals the loaded target time.
+        """
+        self.write_int('timed_sync_enable', 1)
+
+    def disable_timed_sync(self):
+        """
+        Disable timed sync with TT equals the loaded target time.
+        """
+        self.write_int('timed_sync_enable', 0)
+
+    def set_timed_sync(self, tt=None, wait=False, mrst=True):
+        """
+        Set the timed sync for telescope time `TT`.
+
+        :param tt: Telescope time, in FPGA clock ticks since UNIX epoch,
+                   at which sync should be issued.
+        :param mrst: If True, issue reset prior to sync.
+        :param wait: If True, wait for the sync to pass, else return
+                     straight away.
+        """
+        self.assert_mrst()
+        self.deassert_mrst()
+        self.disable_timed_sync()
+        self.write_int('timed_sync_msb', (tt >> 32) & 0xffffffff)
+        self.write_int('timed_sync_enable', 1)
+        self.enable_timed_sync()
+        time_to_sync = self.get_time_to_sync()
+        self.log.info(f'Time until sync is {time_to_sync} clocks')
+        if time_to_sync < 0:
+            self.error('Target sync time is in the past!')
+            raise RuntimeError
+        if wait:
+            self.log.info('Waiting for sync to pass')
+            while(self.get_time_to_sync() > 0):
+                time.sleep(0.25)
 
     def enable_error_flag(self):
         """
@@ -244,91 +305,6 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
         if wait:
             time.sleep(0.05) # Ensure the sync has propagated
-
-    #def set_output_sync_rate(self, mask):
-    #    """
-    #    Set the output sync generation rate. A sync is issued
-    #    when the lower 32-bits of the telescope time counter,
-    #    masked with ``~mask`` == 0. I.e., a mask of 0 will
-    #    cause a sync every 2^32 clock cycles. A mask of 0xffff0000
-    #    will create an output pulse every 2^16 clock cycles.
-    #    Output sync pulses are extended by 256 clocks, so the output pulse rate
-    #    should be lower than this.
-
-    #    :param mask: Mask with which to bitwise AND the telescope time
-    #        counter before comparing to 0.
-    #    :type mask: int
-    #    """
-    #    self.write_int('tt_mask', mask)
-
-    #def update_telescope_time(self, fs_hz=None):
-    #    """
-    #    Arm PPS trigger receivers,
-    #    having loaded an appropriate telescope time.
-
-    #    :param fs_hz: The FPGA DSP clock rate, in Hz. Used to set the
-    #        telescope time counter. If None is provided, self.clk_hz will be used.
-    #    :type fs_hz: int
-
-    #    """
-    #    fs_hz = fs_hz or self.clk_hz
-    #    if fs_hz is None:
-    #        self.logger.error('No FPGA clock rate was provided!')
-    #        raise
-    #    x = self.wait_for_pps()
-    #    has_pps = (x >= 0)
-    #    if not has_pps:
-    #        # Timed out, probably because this isn't the TT SNAP2 with PPS
-    #        self.logger.info("Skipping telescope time update, because this board doesn't have a PPS")
-    #        return
-    #    now = time.time()
-    #    next_pps = int(now) + 1
-    #    self.logger.info("Loading new telescope time at %s" % time.ctime(next_pps))
-    #    target_tt = int(next_pps * fs_hz)
-    #    delay = next_pps - time.time()
-    #    if delay < 0.2:
-    #        self.logger.error("Took too long to generate software sync")
-    #    self.load_telescope_time(target_tt, software_load=False)
-    #    loaded_time = time.time()
-    #    spare = next_pps - loaded_time
-    #    if spare < 0.2:
-    #        self.logger.warning("TT loaded with only %.2f seconds to spare" % spare)
-    #    if spare < 0:
-    #        self.logger.error("TT loaded after the expected PPS arrival!")
-    #    # Now wait for a PPS so that the TT will have been loaded before anything else happend
-    #    if has_pps:
-    #        self.wait_for_pps()
-
-    #def reset_telescope_time(self):
-    #    """
-    #    Reset the telescope time counter to 0 immediately.
-    #    """
-    #    self.change_reg_bits('ctrl', 0, self.OFFSET_RST_TT)
-    #    self.change_reg_bits('ctrl', 1, self.OFFSET_RST_TT)
-    #    self.change_reg_bits('ctrl', 0, self.OFFSET_RST_TT)
-
-    #def load_telescope_time(self, tt, software_load=False):
-    #    """
-    #    Load a new starting value into the telescope time counter on the
-    #    next PPS.
-
-    #    :param tt: Telescope time to load
-    #    :type tt: int
-
-    #    :param software_load: If True, immediately load via a software trigger. Else
-    #        load on the next PPS arrival.
-    #    :type software_load: bool
-    #    """
-    #    assert tt < 2**64 - 1
-    #    self.write_int('tt_load_msb', tt >> 32)
-    #    self.write_int('tt_load_lsb', tt & 0xffffffff)
-    #    self.change_reg_bits('ctrl', 0, self.OFFSET_TT_LOAD_ARM)
-    #    self.change_reg_bits('ctrl', 1, self.OFFSET_TT_LOAD_ARM)
-    #    self.change_reg_bits('ctrl', 0, self.OFFSET_TT_LOAD_ARM)
-    #    if software_load:
-    #        self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_PPS)
-    #        self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_PPS)
-    #        self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_PPS)
 
     def load_internal_time(self, tt, software_load=False):
         """
