@@ -8,6 +8,28 @@ class Sync(Block):
     """
     The Sync block controls internal timing signals.
 
+    It has two timing components, the first is an "Internal Telescope Time (TT)" counter.
+    This counter is synchronized to an external time reference (typically PPS) and maintains
+    a count of FPGA clock ticks since the UNIX epoch.
+
+    The second component is the output synchronization logic, which resets a DSP processing
+    pipeline.
+
+    A typical synchronization flow is:
+
+    1. `initialize()` -- Perform basic firmware initialization.
+    2. `update_internal_time()` -- Set the TT counter to the correct value on the next PPS edge.
+    3. `set_timed_sync(mrst=True)` -- Issue a reset and start trigger to downstream logic at an appropriate time.
+    4. [Optional] Periodically call `arm_sync()` and observe TT vs PPS drift with `get_drift()`.
+    
+    If no external synchronization sources are present a typical flow is:
+
+    1. `initialize()` -- Perform basic firmware initialization.
+    2. `sw_sync(mrst=True)` -- issue an immediate reset and start trigger to downstream logic.
+
+    In this flow, timestamps from the system are not meaningful.
+
+
     :param host: CasperFpga interface for host.
     :type host: casperfpga.CasperFpga
 
