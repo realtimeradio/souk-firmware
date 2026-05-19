@@ -23,20 +23,23 @@ class Sync(Block):
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
     """
-    OFFSET_ACTIVE_HIGH = 0
-    OFFSET_RST_TT_INT = 1
-    OFFSET_MAN_LOAD_INT = 2
-    OFFSET_TT_INT_LOAD_ARM = 3
-    OFFSET_MAN_PPS = 4
-    OFFSET_RST_TT = 5
-    OFFSET_RST_ERR = 6
-    OFFSET_ARM_SYNC_OUT = 7
-    OFFSET_MAN_SYNC = 8
-    OFFSET_ARM_NOISE = 9
-    OFFSET_TT_LOAD_ARM = 10
-    OFFSET_ENABLE_LOOPBACK = 11
-    OFFSET_ENABLE_ERR_FLAG = 12
-    OFFSET_MRST = 12
+    OFFSET_MRST = 0
+    OFFSET_ACTIVE_HIGH = 1
+    OFFSET_RST_TT_INT = 2
+    OFFSET_MAN_LOAD_INT = 3
+    OFFSET_TT_INT_LOAD_ARM = 4
+    OFFSET_MAN_PPS = 5
+    OFFSET_RST_TT = 6
+    OFFSET_RST_ERR = 7
+    OFFSET_ARM_SYNC_OUT = 8
+    OFFSET_MAN_SYNC = 9
+    OFFSET_ARM_NOISE = 10
+    OFFSET_TT_LOAD_ARM = 11
+    OFFSET_ENABLE_LOOPBACK = 12
+    OFFSET_ENABLE_ERR_FLAG = 13
+
+    OFFSET_TIMED_SYNC_SW_SYNC = 0
+    OFFSET_TIMED_SYNC_EN = 1
 
     def __init__(self, host, name, clk_hz=None, sync_delay=1, logger=None):
         super(Sync, self).__init__(host, name, logger)
@@ -137,13 +140,13 @@ class Sync(Block):
         """
         Enable timed sync with TT equals the loaded target time.
         """
-        self.write_int('timed_sync_enable', 1)
+        self.change_reg_bits('timed_sync_ctrl', 1, self.OFFSET_TIMED_SYNC_EN)
 
     def disable_timed_sync(self):
         """
         Disable timed sync with TT equals the loaded target time.
         """
-        self.write_int('timed_sync_enable', 0)
+        self.change_reg_bits('timed_sync_ctrl', 0, self.OFFSET_TIMED_SYNC_EN)
 
     def set_timed_sync(self, tt=None, wait=False, mrst=True):
         """
@@ -292,13 +295,31 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 1, self.OFFSET_ARM_NOISE)
         self.change_reg_bits('ctrl', 0, self.OFFSET_ARM_NOISE)
 
-    def sw_sync(self, wait=True):
+    def sw_sync(self, wait=True, mrst=True):
         """
         Issue a sync pulse from software. This will only do anything
         if appropriate arming commands have been made in advance.
 
         :param wait: If True, wait 50ms for a sync to propagate before returning.
         :type wait: bool
+
+        :param mrst: If True, issue a reset pulse prior to sync.
+        :type mrst: bool
+        """
+        self.deassert_mrst()
+        self.change_reg_bits('ctrl', 0, self.OFFSET_TIMED_SYNC_SW_SYNC)
+        self.assert_mrst()
+        self.deassert_mrst()
+        self.change_reg_bits('ctrl', 1, self.OFFSET_TIMED_SYNC_SW_SYNC)
+        self.change_reg_bits('ctrl', 0, self.OFFSET_TIMED_SYNC_SW_SYNC)
+        if wait:
+            time.sleep(0.05) # Ensure the sync has propagated
+
+    def sw_pps(self, wait=True):
+        """
+        Issue a PPS pulse from software. This can be used to
+        set the telescope time when no PPS signal is connected.
+        This will only do anything if sw_arm has been called in advance.
         """
         self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
         self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_SYNC)
@@ -325,9 +346,9 @@ class Sync(Block):
         self.change_reg_bits('ctrl', 1, self.OFFSET_TT_INT_LOAD_ARM)
         self.change_reg_bits('ctrl', 0, self.OFFSET_TT_INT_LOAD_ARM)
         if software_load:
-            self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_LOAD_INT)
-            self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_LOAD_INT)
-            self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_LOAD_INT)
+            self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
+            self.change_reg_bits('ctrl', 1, self.OFFSET_MAN_SYNC)
+            self.change_reg_bits('ctrl', 0, self.OFFSET_MAN_SYNC)
 
     def get_tt_of_ext_sync(self):
         """

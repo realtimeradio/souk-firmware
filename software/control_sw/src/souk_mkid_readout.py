@@ -484,16 +484,15 @@ class SoukMkidReadout():
             block.initialize(read_only=read_only)
         if not read_only:
             self.use_single_dac()
-            self.logger.info("Detecting and compensating RX vs TX pipeline skew")
-            self.sync.arm_sync()
-            self.sync.sw_sync()
+            #self.logger.info("Detecting and compensating RX vs TX pipeline skew")
+            #self.sync.arm_sync()
+            #self.sync.sw_sync()
             #skew = self.sync.get_pipeline_latency()
             skew = SYNC_DELAY
             self.sync.set_delay(skew)
             self.logger.info(f"Set sync delay to {skew} FPGA clocks")
             self.logger.info("Performing software global reset")
-            self.sync.arm_sync()
-            self.sync.sw_sync()
+            self.sync.sw_sync(mrst=True)
 
     def initialize_shared_blocks(self, read_only=False):
         """
@@ -547,15 +546,14 @@ class SoukMkidReadout():
         if not read_only:
             self.use_single_dac()
             self.logger.info("Detecting and compensating RX vs TX pipeline skew, p%d" % self.pipeline_id)
-            self.sync.arm_sync()
-            self.sync.sw_sync()
+            #self.sync.arm_sync()
+            #self.sync.sw_sync()
             #skew = self.sync.get_pipeline_latency()
             skew = SYNC_DELAY
             self.sync.set_delay(skew)
             self.logger.info(f"Set sync delay to {skew} FPGA clocks, p{self.pipeline_id}")
             self.logger.info(f"Performing software global reset, p{self.pipeline_id}")
-            self.sync.arm_sync()
-            self.sync.sw_sync()
+            self.sync.sw_sync(mrst=True)
 
     def reset_psb_outputs(self):
         """
