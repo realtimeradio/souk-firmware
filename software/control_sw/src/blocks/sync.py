@@ -60,8 +60,8 @@ class Sync(Block):
     OFFSET_ENABLE_LOOPBACK = 12
     OFFSET_ENABLE_ERR_FLAG = 13
 
-    OFFSET_TIMED_SYNC_SW_SYNC = 0
-    OFFSET_TIMED_SYNC_EN = 1
+    OFFSET_TIMED_SYNC_SW_SYNC = 1
+    OFFSET_TIMED_SYNC_EN = 0
 
     def __init__(self, host, name, clk_hz=None, sync_delay=1, logger=None):
         super(Sync, self).__init__(host, name, logger)
@@ -328,12 +328,14 @@ class Sync(Block):
         :param mrst: If True, issue a reset pulse prior to sync.
         :type mrst: bool
         """
-        self.deassert_mrst()
-        self.change_reg_bits('ctrl', 0, self.OFFSET_TIMED_SYNC_SW_SYNC)
-        self.assert_mrst()
-        self.deassert_mrst()
-        self.change_reg_bits('ctrl', 1, self.OFFSET_TIMED_SYNC_SW_SYNC)
-        self.change_reg_bits('ctrl', 0, self.OFFSET_TIMED_SYNC_SW_SYNC)
+        if mrst:
+            self.deassert_mrst()
+        self.change_reg_bits('timed_sync_ctrl', 0, self.OFFSET_TIMED_SYNC_SW_SYNC)
+        if mrst:
+            self.assert_mrst()
+            self.deassert_mrst()
+        self.change_reg_bits('timed_sync_ctrl', 1, self.OFFSET_TIMED_SYNC_SW_SYNC)
+        self.change_reg_bits('timed_sync_ctrl', 0, self.OFFSET_TIMED_SYNC_SW_SYNC)
         if wait:
             time.sleep(0.05) # Ensure the sync has propagated
 
