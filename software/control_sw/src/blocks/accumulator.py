@@ -568,9 +568,7 @@ class WindowedAccumulator(Accumulator):
             raise RuntimeError
         if chan is not None:
             self.set_snapshot_chan(chan)
-        # Force a trigger, but let firmware decide which samples are valid
-        # since this is how the specific channel is selected
-        raw, t = ss.read_raw(man_trig=True, man_valid=False)
+        raw, t = ss.read_raw(man_trig=False, man_valid=False)
         dc = np.frombuffer(raw['data'], dtype='>i4')
         if scale_bp:
             dc /= 2**self._OUTPUT_BP
