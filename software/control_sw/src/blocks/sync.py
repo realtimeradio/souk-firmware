@@ -184,6 +184,7 @@ class Sync(Block):
         self.deassert_mrst()
         self.disable_timed_sync()
         self.write_int('timed_sync_msb', (tt >> 32) & 0xffffffff)
+        self.write_int('timed_sync_lsb', tt & 0xffffffff)
         self.write_int('timed_sync_enable', 1)
         self.enable_timed_sync()
         time_to_sync = self.get_time_to_sync()
