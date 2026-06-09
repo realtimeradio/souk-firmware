@@ -245,7 +245,7 @@ class Mixer(Block):
 
         :param phase_offset: The phase offset at which this oscillator should start
             in units of radians.
-        :type phase: float
+        :type phase_offset: float
 
         :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
         :type los: list
@@ -257,12 +257,18 @@ class Mixer(Block):
         :type next_buf: bool
 
         """
-        if next_buf in [0, 1]:
-            buf = next_buf
-        else:
+        # If next_buf is True or False, base the buffer on the currently
+        # used buf.
+        # Otherwise, force the buffer
+        if type(next_buf) is bool:
             buf = self.get_current_buffer()
             if next_buf:
                 buf = (buf + 1) % 2
+        else:
+            if next_buf in [0, 1]:
+                buf = int(next_buf)
+            else:
+                raise ValueError('Only values 0, 1 are allowed for integer next_buf')
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         if phase is None:
