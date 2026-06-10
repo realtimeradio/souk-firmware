@@ -156,7 +156,7 @@ class Sync(Block):
         :return: FPGA clock ticks until sync. Saturates
                  at +/- 2**31
         """
-        return self.read_int('time_to_sync')
+        return self.read_int('timed_sync_countdown')
 
     def enable_timed_sync(self):
         """
@@ -183,17 +183,16 @@ class Sync(Block):
         self.assert_mrst()
         self.deassert_mrst()
         self.disable_timed_sync()
-        self.write_int('timed_sync_msb', (tt >> 32) & 0xffffffff)
-        self.write_int('timed_sync_lsb', tt & 0xffffffff)
-        self.write_int('timed_sync_enable', 1)
+        self.write_int('timed_sync_time_msb', (tt >> 32) & 0xffffffff)
+        self.write_int('timed_sync_time_lsb', tt & 0xffffffff)
         self.enable_timed_sync()
         time_to_sync = self.get_time_to_sync()
-        self.log.info(f'Time until sync is {time_to_sync} clocks')
+        self.logger.info(f'Time until sync is {time_to_sync} clocks')
         if time_to_sync < 0:
             self.error('Target sync time is in the past!')
             raise RuntimeError
         if wait:
-            self.log.info('Waiting for sync to pass')
+            self.logger.info('Waiting for sync to pass')
             while(self.get_time_to_sync() > 0):
                 time.sleep(0.25)
 
@@ -242,18 +241,13 @@ class Sync(Block):
 
     def get_pipeline_latency(self):
         """
-        Get the difference in arrival time of a sync pulse at the start of the RX chain
-        and at the end of the TX chain, in units of FPGA clock cycles.
-        Depending on the `mix` block signal sharing settings, this is either the total
-        latency (when the TX pipeline sync is shared with the RX pipeline sync) or
-        is the residual skew when the RX pipeline sync is a delayed copy of the TX sync.
+        Get the difference in arrival time of a sync pulse at the TX and RX LOs
 
         :return: Sync time difference, in FPGA clock cycles
         :rtype: int
         """
-        delay = self.get_delay()
         latency = self.read_uint('pipeline_latency')
-        return latency - delay
+        return latency
 
     def get_drift(self):
         """

@@ -88,6 +88,33 @@ class Mixer(Block):
         """
         self.write_int('power_en', 0)
 
+    def get_tx_rx_skew(self):
+        """
+        Return the number of FPGA clock cycles
+        that the RX sync arrives after the TX sync.
+
+        :return: skew, in clock cycles.
+        :rtype: int
+        """
+        return self.read_uint('pipeline_latency')
+
+    def set_buffer_switch_skew(self, n):
+        """
+        Set the switchover point of the RX LO buffer
+        to `n` FPGA cycles after the TX buffer.
+
+        :param n: FPGA clock cycles of relay between TX and RX buffers.
+        :type n: int
+        """
+        self.write_int('sync_delay', n)
+
+    def match_skew(self):
+        """
+        Set the buffer skew to match the measured sync skew.
+        """
+        skew = self.get_tx_rx_skew()
+        self.set_buffer_switch_skew(skew)
+
     def is_power_mode(self):
         """
         Get the current block mode.
