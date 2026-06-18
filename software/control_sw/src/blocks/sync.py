@@ -414,19 +414,19 @@ class Sync(Block):
         sync_period_ms = 1000*sync_period_s
         sync_period_us = 1000000*sync_period_s
         self.logger.info("Detected sync period is %.3f milliseconds" % (sync_period_ms))
-        # Check the offset of a sync from NTP time
+        # Check the offset of a sync from PS time
         self.wait_for_sync()
         ntp_us = 1000000*time.time()
         ntp_offset_us = int(ntp_us) % 1000000 # offset from NTP 1s boundary in microsec
         ntp_offset_f = (ntp_offset_us / sync_period_us) % 1 # fraction of a period offset
-        self.logger.info("NTP offset usecs: ntp_offset_us: %d" % ntp_offset_us)
+        self.logger.info("CPU system time offset usecs: ntp_offset_us: %d" % ntp_offset_us)
         # Wrap fractional offsets
         if ntp_offset_f > 0.5:
             ntp_offset_f -= 1
         self.logger.info("Last sync pulse arrived at time %.5f" % (ntp_us / 1e6))
-        self.logger.info("Sync pulses offset from NTP by %d us" % (ntp_offset_f * sync_period_us))
+        self.logger.info("Sync pulses offset from CPU system time by %d us" % (ntp_offset_f * sync_period_us))
         if abs(ntp_offset_f) > 0.1:
-            self.logger.warning("Sync pulses offset from NTP by %.2f of a period" % ntp_offset_f)
+            self.logger.warning("Sync pulses offset from CPU system_time by %.2f of a period" % ntp_offset_f)
         
         # We assume that the master TT is tracking clocks since unix epoch.
         # Syncs should come every `sync_period` ADC clocks
