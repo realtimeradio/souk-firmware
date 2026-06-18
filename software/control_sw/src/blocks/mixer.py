@@ -36,6 +36,9 @@ class Mixer(Block):
         values.
     :type n_ri_step_bits: int
 
+    :param n_slots: Number of LO tuning slots.
+    :type n_slots: int
+
     """
     # Control bit offsets
     _IND_SYNC_OFFSET = 4
@@ -51,6 +54,9 @@ class Mixer(Block):
     _PHASE_INC_WORD_OFFSET = 0
     _CONTROL_N_WORDS = 4 # parallel words
     _CONTROL_STRUCT_FORMAT = 'iIiI'
+    # Slot control offsets
+    _SLOT_AUTO_SLOT_EN_OFFSET = 0
+    _SLOT_MANUAL_SLOT_OFFSET = 8
     def __init__(self, host, name,
             n_chans=4096,
             n_upstream_chans=8192,
@@ -61,6 +67,7 @@ class Mixer(Block):
             n_scale_bits=8,
             n_ri_step_bits=16,
             n_phase_slots=2**12,
+            n_slots=4,
             logger=None):
         super(Mixer, self).__init__(host, name, logger)
         self.n_chans = n_chans
@@ -74,6 +81,7 @@ class Mixer(Block):
         self._n_scale_bits = n_scale_bits
         self._n_ri_step_bits = n_ri_step_bits
         self.n_phase_slots = n_phase_slots
+        self.n_slots = n_slots
 
     def enable_power_mode(self):
         """
@@ -97,6 +105,78 @@ class Mixer(Block):
         :rtype: int
         """
         return self.read_uint('pipeline_latency')
+
+
+    def get_acc_len(self):
+        """
+        Get the currently loaded accumulation length in units of spectra.
+
+        :return: Current accumulation length
+        :rtype: int
+        """
+        acc_len = self._n_parallel_samples * self.read_uint('acc_len') // self._n_serial_chans
+        return acc_len 
+
+    def set_acc_len(self, acc_len):
+        """
+        Set the number of spectra to accumulate.
+
+        :param acc_len: Number of spectra to accumulate
+        :type acc_len: int
+        """
+        if not acc_len % self._n_parallel_samples == 0:
+            self.logger.critical(f'Accumulation length must be a multiple of {self._n_parallel_samples}')
+            raise ValueError
+        acc_len = self._n_serial_chans * acc_len // self._n_parallel_samples
+        self.write_int('acc_len', acc_len)
+
+    def get_rx_sync_err_count(self):
+        """
+        Get a count of the number of times the external
+        and internal sync pulses in the RX pipeline have
+        failed to coincide.
+        If the various TX/RX sync and skew delays are set\
+        correctly, this should never happen.
+
+        :return: error count
+        :rtype: int
+        """
+        self.read_uint('rx_sync_err_cnt')
+
+    def read_tt(self):
+        """
+        Read the telescope time of the last accumulation
+
+        :return: Telescope time.
+        :rtype: int
+        """
+        msb = self.read_uint('tt_msb')
+        lsb = self.read_uint('tt_lsb')
+        if self.read_uint('tt_msb') != msb:
+            self.logger.error('TT MSBs rolled over while reading')
+            raise RuntimeError
+        return (msb << 32) + lsb
+
+    def set_rx_sync_delay(self, n):
+        """
+        Set the delay between the arrival of a TX sync
+        pulse and the emission of a sync to the start
+        of the RX pipeline.
+
+        :param n: FPGA clock cycles RX sync lags TX
+        :type n: int
+        """
+        self.write_int('sync_delay', n)
+
+    def set_buffer_switch_skew(self, n):
+        """
+        Set the switchover point of the RX LO buffer
+        to `n` FPGA cycles after the TX buffer.
+
+        :param n: FPGA clock cycles of relay between TX and RX buffers.
+        :type n: int
+        """
+        self.write_int('rx_delay', n)
 
     def set_buffer_switch_skew(self, n):
         """
@@ -182,7 +262,7 @@ class Mixer(Block):
         else:
             return v[0]
 
-    def set_amplitude_scale(self, chan, scale=1.0, los=['rx', 'tx'], next_buf=False):
+    def set_amplitude_scale(self, chan, scale=1.0, los=['rx', 'tx'], next_buf=False, slot=0):
         """
         Apply an amplitude scaling <=1 to an output channel.
 
@@ -201,6 +281,9 @@ class Mixer(Block):
             (eg. by `switch_current_buffer`). If 0 or 1, write to that buffer.
         :type next_buf: bool or int
 
+        :param slot: Which slot to write.
+        :type slot: int
+
         """
         if next_buf in [0, 1]:
             buf = next_buf
@@ -208,15 +291,16 @@ class Mixer(Block):
             buf = self.get_current_buffer()
             if next_buf:
                 buf = (buf + 1) % 2
+        assert slot < self.n_slots
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         assert scale >= 0
         scale = self._format_amp_scale(scale)
-        word_base = self._CONTROL_N_WORDS * (buf * self._n_serial_chans + s)
+        word_base = self._CONTROL_N_WORDS * (slot * self._n_serial_chans + s)
         for lo in los:
             if lo not in ['rx', 'tx']:
                 raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-            regname = f'{lo}_lo{p}_control'
+            regname = f'{lo}_lo{p}_control{buf}'
             self.write_int(regname, scale, word_offset=word_base + self._SCALE_WORD_OFFSET)
 
     def _format_phase_step(self, phase, phase_offset):
@@ -258,7 +342,7 @@ class Mixer(Block):
         else:
             return phase_int[0], phase_offset_int[0]
 
-    def set_phase_step(self, chan, phase=None, phase_offset=0.0, los=['rx', 'tx'], next_buf=False):
+    def set_phase_step(self, chan, phase=None, phase_offset=0.0, los=['rx', 'tx'], next_buf=False, slot=0):
         """
         Set the phase increment to apply on each successive sample for
         channel `chan`.
@@ -283,6 +367,9 @@ class Mixer(Block):
             (eg. by `switch_current_buffer`). If 0 or 1, write to that buffer.
         :type next_buf: bool
 
+        :param slot: Slot index to write
+        :type slot: int
+
         """
         # If next_buf is True or False, base the buffer on the currently
         # used buf.
@@ -296,6 +383,7 @@ class Mixer(Block):
                 buf = int(next_buf)
             else:
                 raise ValueError('Only values 0, 1 are allowed for integer next_buf')
+        assert slot < self.n_slots
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         if phase is None:
@@ -305,12 +393,12 @@ class Mixer(Block):
         else:
             phase_scaled, phase_offset_scaled = self._format_phase_step(phase, phase_offset)
         ri_step_scaled = cplx2uint(np.cos(phase) + 1j*np.sin(phase), self._n_ri_step_bits)
-        offset = 4 * self._CONTROL_N_WORDS * (buf * self._n_serial_chans + s)
+        offset = 4 * self._CONTROL_N_WORDS * (slot * self._n_serial_chans + s)
         v = [0, 0, 0]
         for lo in los:
             if lo not in ['rx', 'tx']:
                 raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-            regname = f'{lo}_lo{p}_control'
+            regname = f'{lo}_lo{p}_control{buf}'
             v[self._PHASE_INC_WORD_OFFSET] = phase_scaled
             v[self._PHASE_OFFSET_WORD_OFFSET] = phase_offset_scaled
             v[self._RI_STEP_WORD_OFFSET] = ri_step_scaled
@@ -344,12 +432,15 @@ class Mixer(Block):
         next_buf = (cur_buf + 1) % 2
         self.set_current_buffer(next_buf)
  
-    def get_phase_offset(self, chan, lo='rx'):
+    def get_phase_offset(self, chan, lo='rx', slot=0):
         """
         Get the currently loaded phase increment being applied to channel `chan`.
 
         :param lo: Which LO to read. 'rx' or 'tx'
         :type lo: str
+
+        :param slot: Which slot to read
+        :type slot: int
 
         :return: (phase_step, phase_offset, scale)
             A tuple containing the phase increment (in radians) being applied
@@ -362,8 +453,9 @@ class Mixer(Block):
         s = chan // self._n_parallel_chans # Serial channel position
         if lo not in ['rx', 'tx']:
             raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-        regname = f'{lo}_lo{p}_control'
-        word_base = self._CONTROL_N_WORDS * (cur_buf * self._n_serial_chans + s)
+        regname = f'{lo}_lo{p}_control{cur_buf}'
+        assert slot < self.n_slots
+        word_base = self._CONTROL_N_WORDS * (slot * self._n_serial_chans + s)
         # Increment-per-clock
         inc_val = self.read_int(regname, word_offset=word_base + self._PHASE_INC_WORD_OFFSET) / 2**self._phase_bp * np.pi
         # Now phase offset
@@ -372,7 +464,7 @@ class Mixer(Block):
         scale = self.read_uint(regname, word_offset=word_base + self._SCALE_WORD_OFFSET) / 2**self._n_scale_bits
         return inc_val, phase_offset, scale
 
-    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000, los=['rx', 'tx'], next_buf=False):
+    def set_freqs(self, freqs_hz, phase_offsets, scaling=1.0, sample_rate_hz=2500000000, los=['rx', 'tx'], next_buf=False, slot=0):
         """
         Configure the amplitudes, phases, and frequencies of multiple tones.
 
@@ -399,6 +491,9 @@ class Mixer(Block):
             (eg. by `switch_current_buffer`). If 0 or 1, write to that buffer.
         :type next_buf: bool or int
 
+        :param slot: Slot to write
+        :type slot: int
+
         """
         if next_buf in [0, 1]:
             buf = next_buf
@@ -406,6 +501,7 @@ class Mixer(Block):
             buf = self.get_current_buffer()
             if next_buf:
                 buf = (buf + 1) % 2
+        assert slot < self.n_slots
         freqs_hz = np.array(freqs_hz, dtype=float)
         n_tone = len(freqs_hz)
         phase_offsets = np.array(phase_offsets, dtype=float)
@@ -435,11 +531,11 @@ class Mixer(Block):
             v[self._PHASE_INC_WORD_OFFSET :: self._CONTROL_N_WORDS] = phase_steps_u[i::self._n_parallel_chans]
             v[self._PHASE_OFFSET_WORD_OFFSET :: self._CONTROL_N_WORDS] = phase_offsets_u[i::self._n_parallel_chans]
             v[self._RI_STEP_WORD_OFFSET :: self._CONTROL_N_WORDS] = ri_steps_u[i::self._n_parallel_chans]
-            offset = 4 * self._CONTROL_N_WORDS * (buf * self._n_serial_chans + i)
+            offset = 4 * self._CONTROL_N_WORDS * (slot * self._n_serial_chans + i)
             for lo in los:
                 if lo not in ['rx', 'tx']:
                     raise ValueError(f"Only LOs 'rx' and 'tx' are understood. Not {lo}.")
-                reg = f'{lo}_lo{i}_control'
+                reg = f'{lo}_lo{i}_control{buf}'
                 self.write(reg, v.tobytes(), offset=offset)
 
     def set_phase_switch_pattern(self, pattern, spectra_per_step, los=['rx', 'tx'], n_blank=0):
@@ -531,6 +627,56 @@ class Mixer(Block):
                 out += [d[i * self.n_chans * ntime + j]]
         return np.array(out)
 
+    def get_slot_mode(self):
+        """
+        Get the current slot mode.
+
+        :return: 'auto' or 'manual'
+        :rtype: str
+        """
+        v = self.get_reg_bits('slot_ctrl', self._SLOT_AUTO_SLOT_EN_OFFSET)
+        if v:
+            return 'auto'
+        else:
+            return 'manual'
+
+    def set_slot_auto_mode(self):
+        """
+        Set the slot mode to 'auto'
+
+        """
+
+        self.change_reg_bits('slot_ctrl', 1, self._SLOT_AUTO_SLOT_EN_OFFSET)
+
+    def set_slot_manual_mode(self):
+        """
+        Set the slot mode to 'manual'
+
+        """
+
+        self.change_reg_bits('slot_ctrl', 0, self._SLOT_AUTO_SLOT_EN_OFFSET)
+
+    def get_manual_slot(self):
+        """
+        Get the slot currently set.
+        This slot is not actually in use unless the slot mode
+        is set to 'manual'
+
+        :return: slot ID
+        :rtype: int
+        """
+        return self.get_reg_bits('slot_ctrl', self._SLOT_MANUAL_SLOT_OFFSET, 8)
+
+
+    def set_manual_slot(self, slot):
+        """
+        Set the LO buffers to use a manually specified slot.
+
+        :param slot: slot to use
+        :type slot: int
+        """
+        assert slot < self.n_slots
+        self.write_int('slot_ctrl', slot << self._SLOT_MANUAL_SLOT_OFFSET)
 
     def initialize(self, read_only=False):
         """

@@ -19,9 +19,6 @@ class Accumulator(Block):
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
 
-    :param acc_len: Accumulation length initialization value, in spectra.
-    :type acc_len: int
-
     :param n_chans: Number of frequency channels.
     :type n_chans: int
 
@@ -46,7 +43,6 @@ class Accumulator(Block):
     _OUTPUT_BP = 18 # Output binary point position
     def __init__(self, host, name,
                  logger=None,
-                 acc_len=2**15,
                  n_chans=4096,
                  n_parallel_chans=8,
                  n_parallel_samples=1,
@@ -58,7 +54,6 @@ class Accumulator(Block):
         self.n_chans = n_chans
         self._n_parallel_chans = n_parallel_chans
         self._n_parallel_samples = n_parallel_samples
-        self._default_acc_len = acc_len
         assert n_chans % n_parallel_chans == 0
         self._n_serial_chans = n_chans // n_parallel_chans
         self._dtype = dtype
@@ -240,29 +235,6 @@ class Accumulator(Block):
             plt.show()
         return f
 
-    def get_acc_len(self):
-        """
-        Get the currently loaded accumulation length in units of spectra.
-
-        :return: Current accumulation length
-        :rtype: int
-        """
-        acc_len = self._n_parallel_samples * self.read_uint('acc_len') // self._n_serial_chans
-        return acc_len 
-
-    def set_acc_len(self, acc_len):
-        """
-        Set the number of spectra to accumulate.
-
-        :param acc_len: Number of spectra to accumulate
-        :type acc_len: int
-        """
-        if not acc_len % self._n_parallel_samples == 0:
-            self.logger.critical(f'Accumulation length must be a multiple of {self._n_parallel_samples}')
-            raise ValueError
-        acc_len = self._n_serial_chans * acc_len // self._n_parallel_samples
-        self.write_int('acc_len', acc_len)
-
     def read_tt(self):
         msb = self.read_uint('acc_tt_msb')
         lsb = self.read_uint('acc_tt_lsb')
@@ -293,7 +265,7 @@ class Accumulator(Block):
 
         Status keys:
 
-            - acc_len (int) : Currently loaded accumulation length in number of spectra.
+            - dest_ip (str) : Currently loaded destination IP.
 
         :return: (status_dict, flags_dict) tuple. `status_dict` is a dictionary of
             status key-value pairs. flags_dict is
@@ -303,7 +275,6 @@ class Accumulator(Block):
         """
         stats = {}
         flags = {}
-        stats['acc_len'] = self.get_acc_len()
         if self._has_dest_ip:
             stats['dest_ip'] = self.get_dest_ip()
         return stats, flags
@@ -319,9 +290,8 @@ class Accumulator(Block):
         """
         devs = self.listdev()
         if read_only:
-            self.get_acc_len()
+            pass
         else:
-            self.set_acc_len(self._default_acc_len)
             if self._has_dest_ip:
                 self.set_dest_ip('0.0.0.0')
 
@@ -339,9 +309,6 @@ class WindowedAccumulator(Accumulator):
 
     :param logger: Logger instance to which log messages should be emitted.
     :type logger: logging.Logger
-
-    :param acc_len: Accumulation length initialization value, in spectra.
-    :type acc_len: int
 
     :param n_chans: Number of frequency channels.
     :type n_chans: int
@@ -365,7 +332,6 @@ class WindowedAccumulator(Accumulator):
     """
     def __init__(self, host, name,
                  logger=None,
-                 acc_len=2**15,
                  n_chans=4096,
                  n_parallel_chans=8,
                  n_parallel_samples=1,
@@ -379,7 +345,7 @@ class WindowedAccumulator(Accumulator):
                  max_reuse_bits=9
                 ):
         super(WindowedAccumulator, self).__init__(host, name, logger,
-                acc_len=acc_len, n_chans=n_chans,
+                n_chans=n_chans,
                 n_parallel_chans=n_parallel_chans,
                 n_parallel_samples=n_parallel_samples,
                 is_complex=is_complex,
@@ -398,10 +364,13 @@ class WindowedAccumulator(Accumulator):
         coeffs = np.array(coeffs, dtype=self._window_dtype)
         self.write('window', coeffs.tobytes())
 
-    def get_window(self, n=None):
+    def get_window(self, acc_len, n=None):
         """
         Get the currently loaded window coefficients, duplicating as required
         to match the behaviour of firmware.
+
+        :param acc_len: Accumulation length, in spectra count
+        :type acc_len: int
 
         :return: Vector of coefficients with length matching the number of samples
             accumulated.
@@ -410,7 +379,7 @@ class WindowedAccumulator(Accumulator):
         nbytes = self._window_n_points * np.dtype(self._window_dtype).itemsize
         fullwind = np.frombuffer(self.read('window', nbytes), dtype=self._window_dtype)
         rep_factor = 2**self.get_window_step()
-        n = int(np.ceil(self.get_acc_len() / rep_factor))
+        n = int(np.ceil(acc_len / rep_factor))
         out = fullwind[0:n] / 2**self._window_bp
         out = out.repeat(rep_factor)
         return out
@@ -439,7 +408,7 @@ class WindowedAccumulator(Accumulator):
         """
         return self.read_uint('window_shift') + self._n_parallel_sample_bits
 
-    def set_window(self, windfunc=np.ones):
+    def set_window(self, acc_len, windfunc=np.ones):
         """
         Set the filter window.
 
@@ -447,10 +416,12 @@ class WindowedAccumulator(Accumulator):
             passed an argument `n` indicating the number of points in the window.
             E.g. np.ones
         :type windfunc: Function
+
+        :param acc_len: Accumulation length, in spectra count
+        :type acc_len: int
         """
         # Start with known state, to aid in future debugging
         coeffs = (np.zeros(self._window_n_points))
-        acc_len = self.get_acc_len()
         # Need to reuse coeffs if acc_len is longer than number of window points
         # factoring in that some accumulation is parallel
         f = acc_len / self._n_parallel_samples / self._window_n_points
@@ -583,7 +554,6 @@ class WindowedAccumulator(Accumulator):
 
         Status keys:
 
-            - acc_len (int) : Currently loaded accumulation length in number of spectra.
             - burst_mode (bool) : True if the accumulator is in burst mode, else False
             - burst_mode_chan (int) : LO index of the channel currently selected for burst mode.
             - snapshot_chan (int) : LO index of the channel currently selected for snapshot readout.
