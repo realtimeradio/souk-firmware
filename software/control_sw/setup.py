@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 import glob
 import os
 import re
@@ -18,12 +18,15 @@ def pep440_from_git_describe(desc: str) -> str:
     #         HASH  = abbreviated git commit hash
     if m:
         base, n, sha = m.groups()
-        v = base if n is None else f"{base}.post{n}+g{sha}"
+        if n is None:
+            v = base + ("+dirty" if dirty else "")
+        else:
+            v = f"{base}.post{n}+g{sha}" + (".dirty" if dirty else "")
     else:
         sha = re.sub(r"[^0-9a-f]", "", s.lower())[:8] or "unknown"
-        v = f"0.0+g{sha}"
+        v = f"0.0+g{sha}" + (".dirty" if dirty else "")
 
-    return v + (".dirty" if dirty else "")
+    return v
 
 def get_version(default="0.1") -> str:
     try:
