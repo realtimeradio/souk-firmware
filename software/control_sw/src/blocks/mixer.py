@@ -114,7 +114,7 @@ class Mixer(Block):
         :return: Current accumulation length
         :rtype: int
         """
-        acc_len = self._n_parallel_samples * self.read_uint('acc_len') // self._n_serial_chans
+        acc_len = self._n_parallel_chans * self.read_uint('acc_len') // self._n_serial_chans
         return acc_len 
 
     def set_acc_len(self, acc_len):
@@ -124,10 +124,10 @@ class Mixer(Block):
         :param acc_len: Number of spectra to accumulate
         :type acc_len: int
         """
-        if not acc_len % self._n_parallel_samples == 0:
-            self.logger.critical(f'Accumulation length must be a multiple of {self._n_parallel_samples}')
+        if not acc_len % self._n_parallel_chans == 0:
+            self.logger.critical(f'Accumulation length must be a multiple of {self._n_parallel_chans}')
             raise ValueError
-        acc_len = self._n_serial_chans * acc_len // self._n_parallel_samples
+        acc_len = self._n_serial_chans * acc_len // self._n_parallel_chans
         self.write_int('acc_len', acc_len)
 
     def get_rx_sync_err_count(self):
@@ -141,7 +141,7 @@ class Mixer(Block):
         :return: error count
         :rtype: int
         """
-        self.read_uint('rx_sync_err_cnt')
+        return self.read_uint('rx_sync_err_cnt')
 
     def read_tt(self):
         """
@@ -177,16 +177,6 @@ class Mixer(Block):
         :type n: int
         """
         self.write_int('rx_delay', n)
-
-    def set_buffer_switch_skew(self, n):
-        """
-        Set the switchover point of the RX LO buffer
-        to `n` FPGA cycles after the TX buffer.
-
-        :param n: FPGA clock cycles of relay between TX and RX buffers.
-        :type n: int
-        """
-        self.write_int('sync_delay', n)
 
     def match_skew(self):
         """
@@ -285,12 +275,18 @@ class Mixer(Block):
         :type slot: int
 
         """
-        if next_buf in [0, 1]:
-            buf = next_buf
-        else:
+        # If next_buf is True or False, base the buffer on the currently
+        # used buf.
+        # Otherwise, force the buffer
+        if type(next_buf) is bool:
             buf = self.get_current_buffer()
             if next_buf:
                 buf = (buf + 1) % 2
+        else:
+            if next_buf in [0, 1]:
+                buf = int(next_buf)
+            else:
+                raise ValueError('Only values 0, 1 are allowed for integer next_buf')
         assert slot < self.n_slots
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
@@ -495,12 +491,18 @@ class Mixer(Block):
         :type slot: int
 
         """
-        if next_buf in [0, 1]:
-            buf = next_buf
-        else:
+        # If next_buf is True or False, base the buffer on the currently
+        # used buf.
+        # Otherwise, force the buffer
+        if type(next_buf) is bool:
             buf = self.get_current_buffer()
             if next_buf:
                 buf = (buf + 1) % 2
+        else:
+            if next_buf in [0, 1]:
+                buf = int(next_buf)
+            else:
+                raise ValueError('Only values 0, 1 are allowed for integer next_buf')
         assert slot < self.n_slots
         freqs_hz = np.array(freqs_hz, dtype=float)
         n_tone = len(freqs_hz)
@@ -667,6 +669,26 @@ class Mixer(Block):
         """
         return self.get_reg_bits('slot_ctrl', self._SLOT_MANUAL_SLOT_OFFSET, 8)
 
+    def set_dwell_accs(self, n):
+        """
+        Set the number of accumulations between allowed (auto or manual)
+        LO switches.
+
+        :param n: Number of accumulations between LO switches.
+        :type n: int
+        """
+        self.write_int('dwell', n)
+
+    def get_dwell_accs(self):
+        """
+        Get the number of accumulations between allowed (auto or manual)
+        LO switches.
+
+        :return: Number of accumulations
+        :rtype: int
+        """
+        return self.read_uint('dwell')
+
 
     def set_manual_slot(self, slot):
         """
@@ -685,11 +707,14 @@ class Mixer(Block):
         :param read_only: If True, this method is a no-op. If False,
             set this block to phase rotate mode, but initialize 
             with each channel having zero phase increment.
+            Default acc_len to 1024.
         :type read_only: bool
         """
         if read_only:
             pass
         else:
             self.disable_power_mode()
+            self.set_acc_len(1024)
+            self.set_dwell_accs(1)
             self.set_freqs(np.zeros(self.n_chans), np.zeros(self.n_chans), np.zeros(self.n_chans))
             self.set_phase_switch_pattern([0], 1024) # Don't do any phase switching

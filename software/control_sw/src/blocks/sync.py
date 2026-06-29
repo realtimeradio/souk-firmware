@@ -75,6 +75,9 @@ class Sync(Block):
 
         :rtype: int
         """
+        # Only the most-significant 32 bits of the uptime counter are brought
+        # out to a register (there is no uptime_lsb), so this value is
+        # intentionally coarse, with a resolution of 2**32 FPGA clocks.
         return self.read_uint('uptime_msb') << 32
 
     def period(self):

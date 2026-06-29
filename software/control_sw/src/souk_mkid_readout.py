@@ -38,7 +38,7 @@ N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
 ADC_FPGA_DEMUX_RATIO = 8 # ADC samples per FPGA clock
 N_RX_FFT = N_RX_OVERSAMPLE*4096 # Number of FFT points in RX channelizer 
 N_TX_FFT = 4096 # Number of FFT points in TX synthesizer (not including oversampling)
-SYNC_DELAY = 5714 # TX vs RX skew as measured with firmware loopback
+SYNC_DELAY = 5752 # TX vs RX skew as measured with firmware loopback
 
 FW_TYPE_PARAMS = {
         10: {
@@ -111,7 +111,7 @@ class SoukMkidReadout():
 
         # Lists of block names for initialization - excluding FPGA and RFDC as these are initialized separately
         self._shared_block_names = ['common', 'adc_snapshot', 'dac_snapshot', 'zoomfft', 'zoomacc', 'gen_cordic', 'gen_lut', 'autocorr']
-        self._pipeline_block_names = ['sync', 'input', 'pfb', 'pfbtvg', 'chanselect', 'mixer', 'psb_chanselect', 'psb', 'psbscale', 'accumulator0', 'accumulator1', 'output', 'out_delay']
+        self._pipeline_block_names = ['sync', 'input', 'pfb', 'pfbtvg', 'chanselect', 'mixer', 'psb_chanselect', 'psb', 'psbscale', 'accumulator0', 'output', 'out_delay']
 
     def is_connected(self):
         """
@@ -293,7 +293,7 @@ class SoukMkidReadout():
                                pipeline_id=self.pipeline_id,
                            )
         #: Control interface to Synchronization / Timing block
-        self.sync        = sync.Sync(self._cfpga, f'{prefix}sync', sync_delay=SYNC_DELAY)
+        self.sync        = sync.Sync(self._cfpga, f'{prefix}sync')
         #: Control interface to Input Multiplex block
         self.input       = input.Input(self._cfpga, f'{prefix}input')
         #: Control interface to ADC Snapshot block
@@ -369,16 +369,6 @@ class SoukMkidReadout():
                                         window_n_points=2**11,
                                     )
                                    ]
-            self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc1',
-                                        n_chans=N_TONE,
-                                        n_parallel_chans=1,
-                                        n_parallel_samples=4,
-                                        dtype='>i4',
-                                        is_complex=True,
-                                        has_dest_ip=True,
-                                        window_n_points=2**11,
-                                    )
-                                   ]
         #: Control interface to CORDIC generators
         self.gen_cordic    = generator.Generator(self._cfpga, f'common_cordic_gen')
         #: Control interface to LUT generators
@@ -423,7 +413,6 @@ class SoukMkidReadout():
             self.blocks['psb'        ] =  self.psb
             self.blocks['psbscale'   ] =  self.psbscale
             self.blocks['accumulator0' ] =  self.accumulators[0]
-            self.blocks['accumulator1' ] =  self.accumulators[1]
             self.blocks['output'       ] =  self.output
             self.blocks['out_delay'    ] =  self.out_delay
         
@@ -470,32 +459,8 @@ class SoukMkidReadout():
             in a read_only manner, and skip software reset.
         :type read_only: bool
         """
-        self.logger.warning("initialize() is deprecated due to incompatibility with multiple pipelines. Use initialize_shared_blocks() and initialize_pipeline_blocks() instead.")
-    
-        if not self.fpga.is_programmed():
-            self.logger.info("Board is _NOT_ programmed")
-            if not read_only:
-                self.program() 
-        for blockname, block in self.blocks.items():
-            if read_only:
-                self.logger.info("Initializing block (read only): %s" % blockname)
-            else:
-                self.logger.info("Initializing block (writable): %s" % blockname)
-            block.initialize(read_only=read_only)
-        if not read_only:
-            self.use_single_dac()
-            #self.logger.info("Detecting and compensating RX vs TX pipeline skew")
-            #self.sync.arm_sync()
-            #self.sync.sw_sync()
-            #skew = self.sync.get_pipeline_latency()
-            skew = SYNC_DELAY
-            self.sync.set_delay(skew)
-            self.logger.info(f"Set sync delay to {skew} FPGA clocks")
-            self.logger.info("Performing software global reset")
-            self.sync.sw_sync(mrst=True)
-            mix_skew = self.mixer.get_tx_rx_skew()
-            self.logger.info(f"Configuring mixer RX/TX skew to {mix_skew} clocks")
-            self.mixer.set_buffer_switch_skew(mix_skew)
+        self.initialize_shared_blocks(read_only=read_only)
+        self.initialize_pipeline_blocks(read_only=read_only)
 
     def initialize_shared_blocks(self, read_only=False):
         """
@@ -549,12 +514,7 @@ class SoukMkidReadout():
         if not read_only:
             self.use_single_dac()
             self.logger.info("Detecting and compensating RX vs TX pipeline skew, p%d" % self.pipeline_id)
-            #self.sync.arm_sync()
-            #self.sync.sw_sync()
-            #skew = self.sync.get_pipeline_latency()
-            skew = SYNC_DELAY
-            self.sync.set_delay(skew)
-            self.logger.info(f"Set sync delay to {skew} FPGA clocks, p{self.pipeline_id}")
+            self.mixer.set_rx_sync_delay(SYNC_DELAY)
             self.logger.info(f"Performing software global reset, p{self.pipeline_id}")
             self.sync.sw_sync(mrst=True)
             mix_skew = self.mixer.get_tx_rx_skew()

@@ -576,9 +576,9 @@ class WindowedAccumulator(Accumulator):
         """
         Initialize the block, setting (or reading) the accumulation length.
 
-        :param read_only: If False, set the accumulation length to the value provided
-            when this block was instantiated, and set the window function to all ones.
-            If True, do nothing.
+        :param read_only: 
+            If True, do nothing. If False, set window function to all ones and
+            reset burst / snapshots channels to index 0.
         :type read_only: bool
         """
         super(WindowedAccumulator, self).initialize(read_only=read_only)

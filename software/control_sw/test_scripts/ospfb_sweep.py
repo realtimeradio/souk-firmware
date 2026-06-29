@@ -11,7 +11,7 @@ CONFIGFILE = '/home/jackh/src/souk-firmware/software/control_sw/config/souk-sing
 
 def set_output_freq(r, f, output='psb'):
     if output == 'psb':
-        r.set_tone(0, f + r.adc_clk_hz / 2.) # for consistency of setpoint relative to DAC mixer
+        r.set_multi_tone([f + r.adc_clk_hz / 2.]) # for consistency of setpoint relative to DAC mixer
     elif output == 'lut':
         r.gen_lut.set_output_freq(0, f, r.adc_clk_hz, 0.25)
     elif output == 'cordic':
@@ -45,20 +45,20 @@ def scan_bin(r, n, p=50, b=4, n_chans=4096, output='cordic'):
         print(f"(Maximum power found in bin {x.argmax()}, getting data from bins {binstart}-{binstop})")
         for i in range(b):
             d[i,fn] = x[n_chans // 2 + n - b//2 + i]
-    return d
+    return d, freqs
 
 def plot_scan(r, n, p, b, normalize=True, n_chans=4096, output='cordic'):
-    d = scan_bin(r, n, p, b, n_chans=n_chans, output=output)
+    d, f = scan_bin(r, n, p, b, n_chans=n_chans, output=output)
     if normalize:
         d /= d.max()
     for i in range(b):
-        plt.plot(10*np.log10(d[i]), label=i)
+        plt.plot(f/1e3, 10*np.log10(d[i]), label=i)
     plt.legend()
-    plt.xlabel('Freq [Arb.]')
+    plt.xlabel('Freq [kHz]')
     plt.ylabel('Power [dB]')
     plt.show()
 
-def main(host, configfile, output):
+def main(host, configfile, output, p):
     r = souk_mkid_readout.SoukMkidReadout(host, configfile=configfile)
     r.program()
     r.initialize()
@@ -75,10 +75,9 @@ def main(host, configfile, output):
     r.input.enable_loopback()
     r.pfb.set_fftshift(0xffffffff)
     r.autocorr.set_acc_len(1000)
-    r.sync.arm_sync()
-    r.sync.sw_sync()
+    r.sync.sw_sync(mrst=True)
     overflow_before = r.pfb.get_overflow_count()
-    plot_scan(r, 100, 200, 6, n_chans=n_chans, output=output)
+    plot_scan(r, 100, p, 6, n_chans=n_chans, output=output)
     overflow_after = r.pfb.get_overflow_count()
     overflow_count = overflow_after - overflow_before
     print(f"Total FFT overflows during scan: {overflow_count}")
@@ -101,9 +100,13 @@ if __name__ == "__main__":
         help = "Type of generator to use. 'cordic', 'lut', or 'psb'"
     )
 
+    parser.add_argument("-p", "--points", type=int, default=200,
+        help = "Number of points to plot"
+    )
+
     args = parser.parse_args()
 
     if args.output not in ["cordic", "lut", "psb"]:
         raise ValueError("--output must be cordic, lut, or psb")
 
-    main(args.host, args.configfile, args.output)
+    main(args.host, args.configfile, args.output, args.points)
