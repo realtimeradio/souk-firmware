@@ -88,6 +88,33 @@ class Mixer(Block):
         """
         self.write_int('power_en', 0)
 
+    def get_tx_rx_skew(self):
+        """
+        Return the number of FPGA clock cycles
+        that the RX sync arrives after the TX sync.
+
+        :return: skew, in clock cycles.
+        :rtype: int
+        """
+        return self.read_uint('pipeline_latency')
+
+    def set_buffer_switch_skew(self, n):
+        """
+        Set the switchover point of the RX LO buffer
+        to `n` FPGA cycles after the TX buffer.
+
+        :param n: FPGA clock cycles of relay between TX and RX buffers.
+        :type n: int
+        """
+        self.write_int('sync_delay', n)
+
+    def match_skew(self):
+        """
+        Set the buffer skew to match the measured sync skew.
+        """
+        skew = self.get_tx_rx_skew()
+        self.set_buffer_switch_skew(skew)
+
     def is_power_mode(self):
         """
         Get the current block mode.
@@ -245,7 +272,7 @@ class Mixer(Block):
 
         :param phase_offset: The phase offset at which this oscillator should start
             in units of radians.
-        :type phase: float
+        :type phase_offset: float
 
         :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
         :type los: list
@@ -257,12 +284,18 @@ class Mixer(Block):
         :type next_buf: bool
 
         """
-        if next_buf in [0, 1]:
-            buf = next_buf
-        else:
+        # If next_buf is True or False, base the buffer on the currently
+        # used buf.
+        # Otherwise, force the buffer
+        if type(next_buf) is bool:
             buf = self.get_current_buffer()
             if next_buf:
                 buf = (buf + 1) % 2
+        else:
+            if next_buf in [0, 1]:
+                buf = int(next_buf)
+            else:
+                raise ValueError('Only values 0, 1 are allowed for integer next_buf')
         p = chan % self._n_parallel_chans  # Parallel stream number
         s = chan // self._n_parallel_chans # Serial channel position
         if phase is None:
