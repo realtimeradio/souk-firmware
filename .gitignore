@@ -1,3 +1,5 @@
 .Xil/
 SysgenFeatureReport.htm
 *.log
+*.egg-info
+*.claude

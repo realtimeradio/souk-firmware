@@ -90,7 +90,7 @@ class Accumulator(Block):
             cnt1 = self.get_acc_cnt()
         return cnt1
 
-    def _read_bram(self, get_tt=False, scale_bp=False):
+    def _read_bram(self, get_tt=False, scale_bp=False, get_buf_id=None):
         """ 
         Read RAM containing accumulated spectra.
 
@@ -101,10 +101,15 @@ class Accumulator(Block):
             of the binary point.
         :type scale_bp: int
 
-        :return: data, timestamp tuple
+        :get_buf_id: If True, return buffer IDs corresponding to last sample of accumulation.
+        :type get_buf_id: Bool
+
+        :return: (data, timestamp, buf_id, slot_id) tuple
             data is an array of complex valued data, in int32 format. Array
             dimensions are [FREQUENCY CHANNEL].
             timestamp is the accumulation timestamp, or None if get_tt is false.
+            buf_id is the ping/pong buffer ID, or None if get_buf_id is false.
+            slot_id is the LO slot buffer ID, or None if get_buf_id is false.
         :rtype: numpy.array, int
         """
         dout = np.zeros(self.n_chans, dtype=complex)
@@ -124,14 +129,19 @@ class Accumulator(Block):
             tt = self.read_tt()
         else:
             tt = None
+        if get_buf_id:
+            buf_id, slot_id = self.get_buf_id()
+        else:
+            buf_id = None
+            slot_id = None
         stop_acc_cnt = self.get_acc_cnt()
         if start_acc_cnt != stop_acc_cnt:
             self.logger.warning('Accumulation counter changed while reading data!')
         if scale_bp:
             dout /= 2**self._OUTPUT_BP
-        return dout, tt
+        return dout, tt, buf_id, slot_id
 
-    def get_new_spectra(self, gpio_count=[], get_tt=False):
+    def get_new_spectra(self, gpio_count=[], get_tt=False, get_buf_id=False):
         """
         Wait for a new accumulation to be ready then read it.
 
@@ -142,22 +152,43 @@ class Accumulator(Block):
         :get_tt: If True, return timestamp corresponding to last sample of accumulation.
         :type get_tt: Bool
 
-        :return: spectra_data, gpio_counts, timestamp,
+        :get_buf_id: If True, return ping-pong and slot buffer ID corresponding
+            to the last sample of accumulation.
+        :type get_buf_id: Bool
+
+        :return: spectra_data, gpio_counts, timestamp, buf_id, slot_id
             spectra_data is an array of `self.n_chans` complex-values.
             If gpio_count is not an empty list gpio_values is a list
             of the same length as gpio_count. Otherwise gpio_count is None
-            If get_tt, timestamp is the accumulation timestamp. Otherwise it is None
+            `timestamp` is the accumulation timestamp, or None if get_tt is false.
+            `buf_id` is the ping/pong buffer ID, or None if get_buf_id is false.
+            `slot_id` is the LO slot buffer ID, or None if get_buf_id is false.
         :rtype: numpy.ndarray[, gpio_counters]
 
         """
         self._wait_for_acc()
-        d, timestamp  = self._read_bram(get_tt=get_tt)
+        d, timestamp, buf_id, slot_id  = self._read_bram(get_tt=get_tt, get_buf_id=get_buf_id)
         counts = None
         if gpio_count != []:
             counts = []
             for i in gpio_count:
                 counts += [self.read_gpio_counter(i)]
-        return d, counts, timestamp
+        return d, counts, timestamp, buf_id, slot_id
+
+    def get_buf_id(self):
+        """
+        Get the ping-pong and slot buffer IDs associated with the last valid
+        data sample.
+
+        :return: (buf_id, slot_id)
+            `buf_id` is the ID of the ping-pong mixer buffer.
+            `slot_id` is the ID of the LO slot buffer.
+        :rtype: (int, int)
+        """
+        x = self.read_uint('buffer_id')
+        buf_id = (x >> 16) & 0xff
+        slot_id = x & 0xff
+        return buf_id, slot_id
 
     def read_gpio_counter(self, n):
         """
@@ -514,7 +545,7 @@ class WindowedAccumulator(Accumulator):
         if c0 != c1:
             self.logger.warning('Accumulation count changed while arming')
         self._wait_for_acc()
-        d, _ = self._read_bram(get_tt=None)
+        d, _, _, _ = self._read_bram(get_tt=None)
         return d
 
     def get_new_snapshot(self, chan=None, scale_bp=False):

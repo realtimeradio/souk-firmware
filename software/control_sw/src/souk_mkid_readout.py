@@ -568,7 +568,7 @@ class SoukMkidReadout():
         tx_nearest_bin = np.argmin(np.abs(tx_freq_bins_offset_hz))
         return tx_nearest_bin
 
-    def set_multi_tone(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx','tx']):
+    def set_multi_tone(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx','tx'], slot=0):
         """
         Configure both TX and RX paths for ``i`` tones at frequencies ``freqs_hz[i]``.
         Disables all tones except those provided.
@@ -587,6 +587,9 @@ class SoukMkidReadout():
 
         :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
         :type los: list
+
+        :param slot: LO slot to write.
+        :type slot: int
         """
 
         # Start with maps with everything disabled
@@ -613,12 +616,12 @@ class SoukMkidReadout():
         # Write input map
         self.chanselect.set_channel_outmap(chanmap_in)
         # Write mixer tones
-        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz, los)
+        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz, los, slot=slot)
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
 
 
-    def set_multi_tone_vacc(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx', 'tx'], min_tone_separation=6):
+    def set_multi_tone_vacc(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx', 'tx'], min_tone_separation=6, slot=0):
         """
         Configure both TX and RX paths for multiple tones, supporting multiple tones per FFT bin.
         Handles the VACC constraint that consecutive LO indices cannot feed the same bin.
@@ -642,6 +645,9 @@ class SoukMkidReadout():
             the same FFT bin (due to VACC dual-port RAM timing). Default is 6, anything lower
             will lead to missing tones.
         :type min_tone_separation: int
+
+        :param slot: LO slot to write.
+        :type slot: int
 
         :return: Mapping from tone index to LO index, so users know which LO each tone ended up on (``tone_to_lo``).
         :rtype: dict
@@ -721,7 +727,7 @@ class SoukMkidReadout():
             lo_phases[lo_idx] = phase_offsets_rads[orig_idx]
             lo_amps[lo_idx] = amplitudes[orig_idx]
         
-        self.mixer.set_freqs(lo_freqs_hz, lo_phases, lo_amps, self.adc_clk_hz, los)
+        self.mixer.set_freqs(lo_freqs_hz, lo_phases, lo_amps, self.adc_clk_hz, los, slot=slot)
         
         # Write the inmap for the VACC reorder (PSB side)
         self.psb_chanselect.set_channel_inmap(inmap)
@@ -765,66 +771,3 @@ class SoukMkidReadout():
             self.logger.warning('PSB overflow when summing overlapped banks')
             rv = FENG_ERROR
         return rv
-
-    def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0, amp=1.0):
-        """
-        Configure both TX and RX paths for a tone at frequency ``freq_hz``
-        with ID ``tone_id``.
-
-        :param tone_id: Index number of tone to set
-        :type tone_id: int
-
-        :param freq_hz: Tone frequency, in Hz. Or, use ``None`` to disable
-            this tone index.
-        :type freq_hz: float
-
-        :param phase_offset_rads: Phase offset of tone, in radians.
-        :type phase_offset_rads: float
-
-        :param amp: Tone amplitude, (<=1.0)
-        :type amp: float
-        """
-
-        assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
-        # Disable anywhere either synthesizer is already using this tone ID
-        # TODO: is this the best behaviour?
-        chanmap = self.psb_chanselect.get_channel_outmap()
-        
-        # Handle both numpy array and list of lists cases
-        if isinstance(chanmap, np.ndarray):
-            # Simple case: each bin has one tone
-            for b in np.where(chanmap == tone_id)[0]:
-                self.psb_chanselect.set_single_channel(b, -1)
-        else:
-            # List of lists case: bins can have multiple tones
-            # Work on a copy to avoid mutating internal state returned by
-            # get_channel_outmap() directly.
-            updated_chanmap = [list(tones) for tones in chanmap]
-            for b, tones in enumerate(updated_chanmap):
-                if tone_id in tones:
-                    # Remove this tone from the bin
-                    new_tones = [t for t in tones if t != tone_id]
-                    if len(new_tones) == 0:
-                        new_tones = [-1]
-                    updated_chanmap[b] = new_tones
-            # Write the updated map
-            self.psb_chanselect.set_channel_outmap(updated_chanmap)
-        
-        if freq_hz is None:
-            return
-        ### Configure receiving side
-        rx_nearest_bin, rx_freq_offset_hz = self._get_closest_pfb_bin(freq_hz)
-        # Put this bin in the correct tone slot
-        self.chanselect.set_single_channel(tone_id, rx_nearest_bin)
-        # Configure the mixer at this ID to the appropriate offset freq
-        self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
-                                 phase_offset=phase_offset_rads,
-                                 sample_rate_hz=self.adc_clk_hz)
-        self.mixer.set_amplitude_scale(tone_id, amp)
-        
-        ### Configure transmit side
-        # Index of nearest bin
-        tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
-        # Get index of nearest bin, and place tone in this bin for relevant
-        # synth bank.
-        self.psb_chanselect.set_single_channel(tx_nearest_bin, tone_id)

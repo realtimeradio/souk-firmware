@@ -57,6 +57,8 @@ class Mixer(Block):
     # Slot control offsets
     _SLOT_AUTO_SLOT_EN_OFFSET = 0
     _SLOT_MANUAL_SLOT_OFFSET = 8
+    # Firmware parameters
+    _N_PARALLEL_SAMPLES = 4
     def __init__(self, host, name,
             n_chans=4096,
             n_upstream_chans=8192,
@@ -76,6 +78,7 @@ class Mixer(Block):
         self._upstream_oversample_factor = upstream_oversample_factor
         self._n_parallel_chans = n_parallel_chans
         self._n_serial_chans = n_chans // n_parallel_chans
+        self._n_clock_per_spec = self._n_serial_chans // self._N_PARALLEL_SAMPLES
         self._phase_bp = phase_bp
         self._phase_offset_bp = phase_offset_bp
         self._n_scale_bits = n_scale_bits
@@ -114,7 +117,7 @@ class Mixer(Block):
         :return: Current accumulation length
         :rtype: int
         """
-        acc_len = self._n_parallel_chans * self.read_uint('acc_len') // self._n_serial_chans
+        acc_len = self._n_parallel_chans * self.read_uint('acc_len') // self._n_clock_per_spec
         return acc_len 
 
     def set_acc_len(self, acc_len):
@@ -127,7 +130,7 @@ class Mixer(Block):
         if not acc_len % self._n_parallel_chans == 0:
             self.logger.critical(f'Accumulation length must be a multiple of {self._n_parallel_chans}')
             raise ValueError
-        acc_len = self._n_serial_chans * acc_len // self._n_parallel_chans
+        acc_len = self._n_clock_per_spec * acc_len
         self.write_int('acc_len', acc_len)
 
     def get_rx_sync_err_count(self):
@@ -195,7 +198,7 @@ class Mixer(Block):
         """
         return bool(self.read_int('power_en'))
 
-    def set_chan_freq(self, chan, freq_offset_hz=None, phase_offset=0, sample_rate_hz=2500000000, next_buf=False):
+    def set_chan_freq(self, chan, freq_offset_hz=None, phase_offset=0, sample_rate_hz=2500000000, next_buf=False, slot=0):
         """
         Set the frequency of output channel `chan`.
 
@@ -219,6 +222,9 @@ class Mixer(Block):
             (eg. by `switch_current_buffer`). If 0 or 1, write to that buffer.
         :type next_buf: bool or int
 
+        :param slot: Slot index to write
+        :type slot: int
+
         """
         if freq_offset_hz is None:
             phase_step = None
@@ -226,7 +232,7 @@ class Mixer(Block):
             fft_period_s = self._n_upstream_chans / self._upstream_oversample_factor / sample_rate_hz
             fft_rbw_hz = 1./fft_period_s # FFT channel width, Hz
             phase_step = freq_offset_hz / fft_rbw_hz * 2 * np.pi
-        self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset, next_buf=next_buf)
+        self.set_phase_step(chan, phase=phase_step, phase_offset=phase_offset, next_buf=next_buf, slot=slot)
 
     def _format_amp_scale(self, v):
         """
