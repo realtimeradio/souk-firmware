@@ -38,7 +38,7 @@ N_RX_OVERSAMPLE = 2 # RX channelizer oversampling factor
 ADC_FPGA_DEMUX_RATIO = 8 # ADC samples per FPGA clock
 N_RX_FFT = N_RX_OVERSAMPLE*4096 # Number of FFT points in RX channelizer 
 N_TX_FFT = 4096 # Number of FFT points in TX synthesizer (not including oversampling)
-SYNC_DELAY = 5714 # TX vs RX skew as measured with firmware loopback
+SYNC_DELAY = 5753 # TX vs RX skew as measured with firmware loopback
 
 FW_TYPE_PARAMS = {
         10: {
@@ -111,7 +111,7 @@ class SoukMkidReadout():
 
         # Lists of block names for initialization - excluding FPGA and RFDC as these are initialized separately
         self._shared_block_names = ['common', 'adc_snapshot', 'dac_snapshot', 'zoomfft', 'zoomacc', 'gen_cordic', 'gen_lut', 'autocorr']
-        self._pipeline_block_names = ['sync', 'input', 'pfb', 'pfbtvg', 'chanselect', 'mixer', 'psb_chanselect', 'psb', 'psbscale', 'accumulator0', 'accumulator1', 'output', 'out_delay']
+        self._pipeline_block_names = ['sync', 'input', 'pfb', 'pfbtvg', 'chanselect', 'mixer', 'psb_chanselect', 'psb', 'psbscale', 'accumulator0', 'output', 'out_delay']
 
     def is_connected(self):
         """
@@ -293,7 +293,7 @@ class SoukMkidReadout():
                                pipeline_id=self.pipeline_id,
                            )
         #: Control interface to Synchronization / Timing block
-        self.sync        = sync.Sync(self._cfpga, f'{prefix}sync', sync_delay=SYNC_DELAY)
+        self.sync        = sync.Sync(self._cfpga, f'{prefix}sync')
         #: Control interface to Input Multiplex block
         self.input       = input.Input(self._cfpga, f'{prefix}input')
         #: Control interface to ADC Snapshot block
@@ -369,16 +369,6 @@ class SoukMkidReadout():
                                         window_n_points=2**11,
                                     )
                                    ]
-            self.accumulators   += [accumulator.WindowedAccumulator(self._cfpga, f'{prefix}acc1',
-                                        n_chans=N_TONE,
-                                        n_parallel_chans=1,
-                                        n_parallel_samples=4,
-                                        dtype='>i4',
-                                        is_complex=True,
-                                        has_dest_ip=True,
-                                        window_n_points=2**11,
-                                    )
-                                   ]
         #: Control interface to CORDIC generators
         self.gen_cordic    = generator.Generator(self._cfpga, f'common_cordic_gen')
         #: Control interface to LUT generators
@@ -423,7 +413,6 @@ class SoukMkidReadout():
             self.blocks['psb'        ] =  self.psb
             self.blocks['psbscale'   ] =  self.psbscale
             self.blocks['accumulator0' ] =  self.accumulators[0]
-            self.blocks['accumulator1' ] =  self.accumulators[1]
             self.blocks['output'       ] =  self.output
             self.blocks['out_delay'    ] =  self.out_delay
         
@@ -470,32 +459,8 @@ class SoukMkidReadout():
             in a read_only manner, and skip software reset.
         :type read_only: bool
         """
-        self.logger.warning("initialize() is deprecated due to incompatibility with multiple pipelines. Use initialize_shared_blocks() and initialize_pipeline_blocks() instead.")
-    
-        if not self.fpga.is_programmed():
-            self.logger.info("Board is _NOT_ programmed")
-            if not read_only:
-                self.program() 
-        for blockname, block in self.blocks.items():
-            if read_only:
-                self.logger.info("Initializing block (read only): %s" % blockname)
-            else:
-                self.logger.info("Initializing block (writable): %s" % blockname)
-            block.initialize(read_only=read_only)
-        if not read_only:
-            self.use_single_dac()
-            #self.logger.info("Detecting and compensating RX vs TX pipeline skew")
-            #self.sync.arm_sync()
-            #self.sync.sw_sync()
-            #skew = self.sync.get_pipeline_latency()
-            skew = SYNC_DELAY
-            self.sync.set_delay(skew)
-            self.logger.info(f"Set sync delay to {skew} FPGA clocks")
-            self.logger.info("Performing software global reset")
-            self.sync.sw_sync(mrst=True)
-            mix_skew = self.mixer.get_tx_rx_skew()
-            self.logger.info(f"Configuring mixer RX/TX skew to {mix_skew} clocks")
-            self.mixer.set_buffer_switch_skew(mix_skew)
+        self.initialize_shared_blocks(read_only=read_only)
+        self.initialize_pipeline_blocks(read_only=read_only)
 
     def initialize_shared_blocks(self, read_only=False):
         """
@@ -549,12 +514,7 @@ class SoukMkidReadout():
         if not read_only:
             self.use_single_dac()
             self.logger.info("Detecting and compensating RX vs TX pipeline skew, p%d" % self.pipeline_id)
-            #self.sync.arm_sync()
-            #self.sync.sw_sync()
-            #skew = self.sync.get_pipeline_latency()
-            skew = SYNC_DELAY
-            self.sync.set_delay(skew)
-            self.logger.info(f"Set sync delay to {skew} FPGA clocks, p{self.pipeline_id}")
+            self.mixer.set_rx_sync_delay(SYNC_DELAY)
             self.logger.info(f"Performing software global reset, p{self.pipeline_id}")
             self.sync.sw_sync(mrst=True)
             mix_skew = self.mixer.get_tx_rx_skew()
@@ -608,7 +568,7 @@ class SoukMkidReadout():
         tx_nearest_bin = np.argmin(np.abs(tx_freq_bins_offset_hz))
         return tx_nearest_bin
 
-    def set_multi_tone(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx','tx']):
+    def set_multi_tone(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx','tx'], slot=0):
         """
         Configure both TX and RX paths for ``i`` tones at frequencies ``freqs_hz[i]``.
         Disables all tones except those provided.
@@ -627,6 +587,9 @@ class SoukMkidReadout():
 
         :param los: List of LOs to write to. Can be ['rx'], ['tx'] or ['rx', 'tx']
         :type los: list
+
+        :param slot: LO slot to write.
+        :type slot: int
         """
 
         # Start with maps with everything disabled
@@ -653,12 +616,12 @@ class SoukMkidReadout():
         # Write input map
         self.chanselect.set_channel_outmap(chanmap_in)
         # Write mixer tones
-        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz, los)
+        self.mixer.set_freqs(lo_freqs_hz, phase_offsets_rads, amplitudes, self.adc_clk_hz, los, slot=slot)
         # Write output maps
         self.psb_chanselect.set_channel_outmap(chanmap_psb)
 
 
-    def set_multi_tone_vacc(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx', 'tx'], min_tone_separation=6):
+    def set_multi_tone_vacc(self, freqs_hz, phase_offsets_rads=None, amplitudes=None, los=['rx', 'tx'], min_tone_separation=6, slot=0):
         """
         Configure both TX and RX paths for multiple tones, supporting multiple tones per FFT bin.
         Handles the VACC constraint that consecutive LO indices cannot feed the same bin.
@@ -682,6 +645,9 @@ class SoukMkidReadout():
             the same FFT bin (due to VACC dual-port RAM timing). Default is 6, anything lower
             will lead to missing tones.
         :type min_tone_separation: int
+
+        :param slot: LO slot to write.
+        :type slot: int
 
         :return: Mapping from tone index to LO index, so users know which LO each tone ended up on (``tone_to_lo``).
         :rtype: dict
@@ -761,7 +727,7 @@ class SoukMkidReadout():
             lo_phases[lo_idx] = phase_offsets_rads[orig_idx]
             lo_amps[lo_idx] = amplitudes[orig_idx]
         
-        self.mixer.set_freqs(lo_freqs_hz, lo_phases, lo_amps, self.adc_clk_hz, los)
+        self.mixer.set_freqs(lo_freqs_hz, lo_phases, lo_amps, self.adc_clk_hz, los, slot=slot)
         
         # Write the inmap for the VACC reorder (PSB side)
         self.psb_chanselect.set_channel_inmap(inmap)
@@ -805,66 +771,3 @@ class SoukMkidReadout():
             self.logger.warning('PSB overflow when summing overlapped banks')
             rv = FENG_ERROR
         return rv
-
-    def set_tone(self, tone_id, freq_hz, phase_offset_rads=0.0, amp=1.0):
-        """
-        Configure both TX and RX paths for a tone at frequency ``freq_hz``
-        with ID ``tone_id``.
-
-        :param tone_id: Index number of tone to set
-        :type tone_id: int
-
-        :param freq_hz: Tone frequency, in Hz. Or, use ``None`` to disable
-            this tone index.
-        :type freq_hz: float
-
-        :param phase_offset_rads: Phase offset of tone, in radians.
-        :type phase_offset_rads: float
-
-        :param amp: Tone amplitude, (<=1.0)
-        :type amp: float
-        """
-
-        assert tone_id < N_TONE, f'Only tone IDs 0..{N_TONE-1} supported'
-        # Disable anywhere either synthesizer is already using this tone ID
-        # TODO: is this the best behaviour?
-        chanmap = self.psb_chanselect.get_channel_outmap()
-        
-        # Handle both numpy array and list of lists cases
-        if isinstance(chanmap, np.ndarray):
-            # Simple case: each bin has one tone
-            for b in np.where(chanmap == tone_id)[0]:
-                self.psb_chanselect.set_single_channel(b, -1)
-        else:
-            # List of lists case: bins can have multiple tones
-            # Work on a copy to avoid mutating internal state returned by
-            # get_channel_outmap() directly.
-            updated_chanmap = [list(tones) for tones in chanmap]
-            for b, tones in enumerate(updated_chanmap):
-                if tone_id in tones:
-                    # Remove this tone from the bin
-                    new_tones = [t for t in tones if t != tone_id]
-                    if len(new_tones) == 0:
-                        new_tones = [-1]
-                    updated_chanmap[b] = new_tones
-            # Write the updated map
-            self.psb_chanselect.set_channel_outmap(updated_chanmap)
-        
-        if freq_hz is None:
-            return
-        ### Configure receiving side
-        rx_nearest_bin, rx_freq_offset_hz = self._get_closest_pfb_bin(freq_hz)
-        # Put this bin in the correct tone slot
-        self.chanselect.set_single_channel(tone_id, rx_nearest_bin)
-        # Configure the mixer at this ID to the appropriate offset freq
-        self.mixer.set_chan_freq(tone_id, freq_offset_hz=rx_freq_offset_hz,
-                                 phase_offset=phase_offset_rads,
-                                 sample_rate_hz=self.adc_clk_hz)
-        self.mixer.set_amplitude_scale(tone_id, amp)
-        
-        ### Configure transmit side
-        # Index of nearest bin
-        tx_nearest_bin = self._get_closest_psb_bin(freq_hz)
-        # Get index of nearest bin, and place tone in this bin for relevant
-        # synth bank.
-        self.psb_chanselect.set_single_channel(tx_nearest_bin, tone_id)

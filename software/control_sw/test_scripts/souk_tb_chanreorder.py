@@ -39,7 +39,7 @@ def main(args):
     r.mixer.enable_power_mode()
     print('Getting spectra')
     acc.get_new_spectra() # Flush a spectra
-    x = acc.get_new_spectra()
+    x, _, _, _, _ = acc.get_new_spectra()
     assert x.imag.sum() == 0
     x = x.real / args.acclen
     

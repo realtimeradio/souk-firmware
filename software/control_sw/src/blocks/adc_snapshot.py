@@ -69,6 +69,18 @@ class AdcSnapshot(Block):
         self._trigger_snapshot()
         return self._read_samples()
 
+    def get_tt_of_snapshot(self):
+        """
+        Get the telescope time corresponding to the start of
+        the last snapshot capture.
+
+        :return: Telescope time. Number of FPGA clock ticks since UNIX epoch.
+        :rtype: int
+        """
+        tt_msb = self.read_uint('tt_msb')
+        tt_lsb = self.read_uint('tt_lsb')
+        return (tt_msb << 32) + tt_lsb
+
     def plot_adc_snapshot(self, nsamples=None, signals=None):
         """
         Same as `plot_snapshot` for backwards compatibility
