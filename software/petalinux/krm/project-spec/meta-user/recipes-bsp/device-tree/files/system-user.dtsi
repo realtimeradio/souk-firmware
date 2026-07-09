@@ -1,8 +1,64 @@
 /include/ "system-conf.dtsi"
 / {
 	chosen {
-		bootargs = "earlycon clk_ignore_unused root=/dev/mmcblk1p2 rw rootwait cpuidle.off=1 console=ttyPS0,115200";
+		bootargs = "earlycon clk_ignore_unused root=/dev/mmcblk1p2 rw rootwait cpuidle.off=1 console=ttyPS0,115200 uio_pdrv_genirq.of_id=generic-uio";
 		stdout-path = "serial0:115200n8";
+	};
+
+	user_io@a0000000 {
+		compatible = "generic-uio";
+		reg = <0x0 0xa0000000 0x0 0x20000000>;
+		linux,uio-name = "user_io";
+	};
+
+	/* Eight 2 MiB DMA buffers, allocated from the 256 MiB CMA pool by the
+	 * u-dma-buf module (recipes-modules/u-dma-buf). Each appears as
+	 * /dev/udmabufN with its own independent sysfs sync controls, so
+	 * separate processes should each claim their own device rather than
+	 * share one. mmap without O_SYNC for a cacheable mapping; physical
+	 * address for DMA is in /sys/class/u-dma-buf/udmabufN/phys_addr.
+	 * If a buffer is ever targeted by a coherent master (e.g. LPD ADMA
+	 * with AWCACHE=0xF), add "dma-coherent;" to that node and skip the
+	 * sync_for_cpu step. */
+	udmabuf@0 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf0";
+		size = <0x200000>;
+	};
+	udmabuf@1 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf1";
+		size = <0x200000>;
+	};
+	udmabuf@2 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf2";
+		size = <0x200000>;
+	};
+	udmabuf@3 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf3";
+		size = <0x200000>;
+	};
+	udmabuf@4 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf4";
+		size = <0x200000>;
+	};
+	udmabuf@5 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf5";
+		size = <0x200000>;
+	};
+	udmabuf@6 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf6";
+		size = <0x200000>;
+	};
+	udmabuf@7 {
+		compatible = "ikwzm,u-dma-buf";
+		device-name = "udmabuf7";
+		size = <0x200000>;
 	};
 };
 
