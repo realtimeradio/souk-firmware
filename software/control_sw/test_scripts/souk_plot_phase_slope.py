@@ -9,7 +9,7 @@ import souk_mkid_readout
 
 HOST = 'krc4700.work.pvt'
 CONFIGFILE = '/home/jackh/src/souk-firmware/software/control_sw/config/souk-dual-pipeline.yaml'
-SYNC_DELAY = 5709
+SYNC_DELAY = 5753
 
 def set_tones(r, offset):
     tones_hz = np.fft.fftfreq(r.fw_params['n_chan_rx'], 1./r.adc_clk_hz) + r.adc_clk_hz/2.
@@ -34,12 +34,12 @@ def main(host, configfile, pipeline_id, offset, sync_delay):
     print('%s status:' % r.pfb.name)
     r.pfb.print_status()
     acc = r.accumulators[0]
-    acc.set_acc_len(1000)
+    mix = r.mixer
+    mix.set_acc_len(1000)
     set_tones(r, offset)
     print('Setting sync delay to %s' % sync_delay)
-    r.sync.set_delay(sync_delay)
-    r.sync.arm_sync(wait=False)
-    r.sync.sw_sync()
+    mix.set_rx_sync_delay(sync_delay)
+    r.sync.sw_sync(mrst=True)
     acc._wait_for_acc()
     acc.plot_spectra(power=False)
 
