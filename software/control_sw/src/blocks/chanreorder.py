@@ -603,9 +603,9 @@ class ChanReorderMultiSampleIn(ChanReorder):
             self.set_channel_outmap(chan_order)
 
 class VaccReorderMultiSampleIn(ChanReorderMultiSampleIn):
-    DISCARD_BIT = np.uint32(2**31) # 0x80000000
+    DISCARD_BIT = 0x8000
     DISCARD_BIN = 0 | DISCARD_BIT # doesnt matter what the address is when discard bit set
-    ADDR_MASK   = DISCARD_BIT-1 # 0x7FFFFFFF
+    ADDR_MASK   = DISCARD_BIT-1 # 0x7FFF
     _map_format = '>i2' # CASPER library-defined map word format
 
     def set_channel_inmap(self, inmap):
