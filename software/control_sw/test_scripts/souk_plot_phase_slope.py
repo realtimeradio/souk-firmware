@@ -9,7 +9,7 @@ import souk_mkid_readout
 
 HOST = 'krc4700.work.pvt'
 CONFIGFILE = '/home/jackh/src/souk-firmware/software/control_sw/config/souk-dual-pipeline.yaml'
-SYNC_DELAY = 5753
+SYNC_DELAY = 5754
 
 def set_tones(r, offset):
     tones_hz = np.fft.fftfreq(r.fw_params['n_chan_rx'], 1./r.adc_clk_hz) + r.adc_clk_hz/2.
