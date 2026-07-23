@@ -4172,9 +4172,10 @@ CONFIG_initoverlay=y
 # CONFIG_peekpoke is not set
 
 #
-# user packages 
+# user packages
 #
 # CONFIG_foo is not set
+# CONFIG_u-dma-buf is not set
 
 #
 # PetaLinux RootFS Settings

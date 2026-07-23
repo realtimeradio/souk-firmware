@@ -1,6 +1,6 @@
 PETALINUX_VER=2021.2
 VALIDATE_HW_CHKSUM=1
-HARDWARE_PATH=/home/jackh/src/souk-firmware/firmware/src/souk_single_pipeline_krm/myproj/top.xsa
-HARDWARE_CHECKSUM=6138dc8ee3880e37236c110bcbe4b5bb
+HARDWARE_PATH=/data/souk-firmware/firmware/src/krm_template/myproj/top.xsa
+HARDWARE_CHECKSUM=169f64090e34f15f0a32c2ec007997d5
 YOCTO_SDK=895fbcce2f0a15ac1ff1fbc579359da1
-RFSCONFIG_CHKSUM=c0904a23dcfb5e60d08dbc05b8e2e0a7
+RFSCONFIG_CHKSUM=e94ec007d8f1351fe716e5a493d37b43

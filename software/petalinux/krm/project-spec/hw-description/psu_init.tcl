@@ -893,7 +893,7 @@ set psu_clock_init_data {
 		# PSU_CRL_APB_PL0_REF_CTRL_DIVISOR1                                               0x1
 
 		# 6 bit divider
-		# PSU_CRL_APB_PL0_REF_CTRL_DIVISOR0                                               0xa
+		# PSU_CRL_APB_PL0_REF_CTRL_DIVISOR0                                               0x5
 
 		# 000 = IOPLL; 010 = RPLL; 011 = DPLL; (This signal may only be toggled af
     # ter 4 cycles of the old clock and 4 cycles of the new clock. This is not
@@ -901,8 +901,8 @@ set psu_clock_init_data {
 		# PSU_CRL_APB_PL0_REF_CTRL_SRCSEL                                                 0x2
 
 		# This register controls this reference clock
-		#(OFFSET, MASK, VALUE)      (0XFF5E00C0, 0x013F3F07U ,0x01010A02U)  */
-    mask_write 0XFF5E00C0 0x013F3F07 0x01010A02
+		#(OFFSET, MASK, VALUE)      (0XFF5E00C0, 0x013F3F07U ,0x01010502U)  */
+    mask_write 0XFF5E00C0 0x013F3F07 0x01010502
 		# Register : AMS_REF_CTRL @ 0XFF5E0108</p>
 
 		# 6 bit divider
@@ -16691,10 +16691,15 @@ set psu_afi_config {
     #  width 11: reserved
 		# PSU_FPD_SLCR_AFI_FS_DW_SS0_SEL                                                  0x0
 
+		# Select the 32/64/128-bit data width selection for the Slave 1 00: 32-bit
+    #  AXI data width (default) 01: 64-bit AXI data width 10: 128-bit AXI data
+    #  width 11: reserved
+		# PSU_FPD_SLCR_AFI_FS_DW_SS1_SEL                                                  0x2
+
 		# afi fs SLCR control register. This register is static and should not be
     # modified during operation.
-		#(OFFSET, MASK, VALUE)      (0XFD615000, 0x00000300U ,0x00000000U)  */
-    mask_write 0XFD615000 0x00000300 0x00000000
+		#(OFFSET, MASK, VALUE)      (0XFD615000, 0x00000F00U ,0x00000800U)  */
+    mask_write 0XFD615000 0x00000F00 0x00000800
 }
 
 set psu_ps_pl_reset_config_data {
